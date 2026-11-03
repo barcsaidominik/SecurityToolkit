@@ -1,0 +1,620 @@
+using SecurityToolkit.Core.Installation;
+using SecurityToolkit.Core.Scanners;
+using SecurityToolkit.Core.Tests.Scanners;
+
+namespace SecurityToolkit.Core.Tests.Installation;
+
+public class SecurityToolkitInstallerTests : IDisposable
+{
+    private readonly string _root;
+
+    public SecurityToolkitInstallerTests()
+    {
+        _root = Directory.CreateTempSubdirectory("installer-tests-").FullName;
+    }
+
+    public void Dispose()
+    {
+        if (Directory.Exists(_root))
+        {
+            Directory.Delete(_root, recursive: true);
+        }
+    }
+
+    private static IReadOnlyDictionary<string, string> Templates() => new Dictionary<string, string>
+    {
+        ["Toolkit.Common.ps1"] = "# common\n",
+        ["Initialize-SecurityTools.ps1"] = "# init\n",
+        ["Restore-SecurityToolkit.ps1"] = "# restore\n",
+        ["SecurityToolkit.props"] = "<Project></Project>\n",
+        ["gitleaks.toml"] = "# gitleaks config\n",
+        ["semgrep-starter.yml"] = "rules: []\n",
+    };
+
+    [Fact]
+    public async Task InstallAsync_NeverWritesLocalLockOrSonarServerPins()
+    {
+        var installer = new SecurityToolkitInstaller(Templates());
+        var options = new InstallOptions(_root, NonInteractive: true, ConfigureOnly: true);
+
+        await installer.InstallAsync(options, configProfile: null, toolProvisioner: null);
+
+        var securityDirectory = Path.Combine(_root, ".security");
+        var lockJson = await File.ReadAllTextAsync(Path.Combine(securityDirectory, SecurityToolkitInstaller.LockFileName));
+        Assert.DoesNotContain("sonarServer", lockJson, StringComparison.Ordinal);
+        Assert.DoesNotContain("postgres", lockJson, StringComparison.Ordinal);
+        Assert.False(File.Exists(Path.Combine(securityDirectory, "security.lock.local.json")));
+
+        var configJson = await File.ReadAllTextAsync(Path.Combine(securityDirectory, SecurityToolkitInstaller.ConfigFileName));
+        Assert.DoesNotContain("startSonarServer", configJson, StringComparison.Ordinal);
+        Assert.DoesNotContain("sonarServer", configJson, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task InstallAsync_LegacyConfigWithProjectLevelSonarServerKeys_IsAcceptedAndRewrittenWithoutThem()
+    {
+        var securityDirectory = Path.Combine(_root, ".security");
+        Directory.CreateDirectory(securityDirectory);
+        await File.WriteAllTextAsync(
+            Path.Combine(securityDirectory, SecurityToolkitInstaller.ConfigFileName),
+            """
+            {
+              "schemaVersion": 1,
+              "startSonarServer": true,
+              "sonar": { "url": "http://sonar.example:9000", "port": 9001 },
+              "images": { "sonarServer": "sonarqube:community", "postgres": "postgres:17" }
+            }
+            """);
+        var legacyProfile = new Dictionary<string, object?> { ["startSonarServer"] = true };
+
+        var outcome = await new SecurityToolkitInstaller(Templates()).InstallAsync(
+            new InstallOptions(_root, NonInteractive: true, ConfigureOnly: true), legacyProfile, toolProvisioner: null);
+
+        Assert.Equal(0, outcome.ExitCode);
+        var config = ScannerSupport.ParseJsonObject(
+            await File.ReadAllTextAsync(Path.Combine(securityDirectory, SecurityToolkitInstaller.ConfigFileName)));
+        Assert.False(config.ContainsKey("startSonarServer"));
+        var sonar = ScannerSupport.GetDictionary(config, "sonar")!;
+        Assert.Equal("http://sonar.example:9000", ScannerSupport.GetString(sonar, "url"));
+        Assert.False(sonar.ContainsKey("port"));
+        var images = ScannerSupport.GetDictionary(config, "images")!;
+        Assert.False(images.ContainsKey("sonarServer"));
+        Assert.False(images.ContainsKey("postgres"));
+    }
+
+    [Fact]
+    public async Task InstallAsync_LegacySnykConfigEntries_AreAcceptedAndDropped()
+    {
+        var securityDirectory = Path.Combine(_root, ".security");
+        Directory.CreateDirectory(securityDirectory);
+        await File.WriteAllTextAsync(
+            Path.Combine(securityDirectory, SecurityToolkitInstaller.ConfigFileName),
+            """
+            {
+              "schemaVersion": 1,
+              "tools": { "gitleaks": true, "snyk": true },
+              "versions": { "snyk": "1.1300.0" }
+            }
+            """);
+        var legacyProfile = new Dictionary<string, object?>
+        {
+            ["tools"] = new Dictionary<string, object?> { ["snyk"] = true },
+        };
+
+        var outcome = await new SecurityToolkitInstaller(Templates()).InstallAsync(
+            new InstallOptions(_root, NonInteractive: true, ConfigureOnly: true), legacyProfile, toolProvisioner: null);
+
+        Assert.Equal(0, outcome.ExitCode);
+        var configJson = await File.ReadAllTextAsync(Path.Combine(securityDirectory, SecurityToolkitInstaller.ConfigFileName));
+        Assert.DoesNotContain("snyk", configJson, StringComparison.Ordinal);
+        var lockJson = await File.ReadAllTextAsync(Path.Combine(securityDirectory, SecurityToolkitInstaller.LockFileName));
+        Assert.DoesNotContain("snyk", lockJson, StringComparison.Ordinal);
+        var yaml = await File.ReadAllTextAsync(Path.Combine(_root, "azure-security-toolkit.yml"));
+        Assert.DoesNotContain("snyk", yaml, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task InstallAsync_DryRun_WritesNothingToDisk()
+    {
+        var installer = new SecurityToolkitInstaller(Templates());
+        var options = new InstallOptions(_root, NonInteractive: true, DryRun: true);
+
+        var outcome = await installer.InstallAsync(options, configProfile: null, toolProvisioner: null);
+
+        Assert.Equal(0, outcome.ExitCode);
+        Assert.False(Directory.Exists(Path.Combine(_root, ".security")));
+    }
+
+    [Fact]
+    public async Task InstallAsync_ConfigureOnly_GeneratesFilesWithoutProvisioning()
+    {
+        var installer = new SecurityToolkitInstaller(Templates());
+        var options = new InstallOptions(_root, NonInteractive: true, ConfigureOnly: true);
+
+        var outcome = await installer.InstallAsync(options, configProfile: null, toolProvisioner: null);
+
+        Assert.Equal(0, outcome.ExitCode);
+        var securityDirectory = Path.Combine(_root, ".security");
+        Assert.True(File.Exists(Path.Combine(securityDirectory, SecurityToolkitInstaller.ConfigFileName)));
+        Assert.True(File.Exists(Path.Combine(securityDirectory, SecurityToolkitInstaller.LockFileName)));
+        Assert.True(File.Exists(Path.Combine(securityDirectory, "Toolkit.Common.ps1")));
+        Assert.True(File.Exists(Path.Combine(_root, ".gitignore")));
+        Assert.Contains("ConfigureOnly", string.Join(' ', outcome.Messages));
+    }
+
+    [Fact]
+    public async Task InstallAsync_ConfigureOnly_WithGitleaksEnabled_WritesGitleaksTemplate()
+    {
+        var installer = new SecurityToolkitInstaller(Templates());
+        var options = new InstallOptions(_root, NonInteractive: true, ConfigureOnly: true);
+
+        await installer.InstallAsync(options, configProfile: null, toolProvisioner: null);
+
+        Assert.True(File.Exists(Path.Combine(_root, ".security", "gitleaks.toml")));
+        Assert.True(File.Exists(Path.Combine(_root, ".semgrepignore")));
+    }
+
+    [Fact]
+    public async Task InstallAsync_CSharpProject_WiresDirectoryBuildPropsAndEditorConfig()
+    {
+        var projectDirectory = Path.Combine(_root, "src", "App");
+        Directory.CreateDirectory(projectDirectory);
+        File.WriteAllText(Path.Combine(projectDirectory, "App.csproj"), "<Project Sdk=\"Microsoft.NET.Sdk\"></Project>");
+
+        var installer = new SecurityToolkitInstaller(Templates());
+        var options = new InstallOptions(_root, NonInteractive: true, ConfigureOnly: true);
+
+        await installer.InstallAsync(options, configProfile: null, toolProvisioner: null);
+
+        var propsPath = Path.Combine(_root, "Directory.Build.props");
+        Assert.True(File.Exists(propsPath));
+        Assert.Contains("SecurityToolkit", File.ReadAllText(propsPath));
+
+        var editorConfigPath = Path.Combine(projectDirectory, ".editorconfig");
+        Assert.True(File.Exists(editorConfigPath));
+        Assert.Contains("dotnet_diagnostic.CA3001.severity", File.ReadAllText(editorConfigPath));
+    }
+
+    [Fact]
+    public async Task InstallAsync_LegacyProjectSpecificSonarComposeExists_AddsMigrationMessage()
+    {
+        var legacySonarDirectory = Path.Combine(_root, ".security", "sonar");
+        Directory.CreateDirectory(legacySonarDirectory);
+        File.WriteAllText(Path.Combine(legacySonarDirectory, "compose.yml"), "name: security-toolkit-sonar-deadbeefcafe\n");
+
+        var installer = new SecurityToolkitInstaller(Templates());
+        var options = new InstallOptions(_root, NonInteractive: true, ConfigureOnly: true);
+
+        var outcome = await installer.InstallAsync(options, configProfile: null, toolProvisioner: null);
+
+        Assert.Contains(outcome.Messages, m => m.Contains("Régi, projekt-specifikus Sonar Docker stack", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task InstallAsync_NoLegacySonarCompose_DoesNotAddMigrationMessage()
+    {
+        var installer = new SecurityToolkitInstaller(Templates());
+        var options = new InstallOptions(_root, NonInteractive: true, ConfigureOnly: true);
+
+        var outcome = await installer.InstallAsync(options, configProfile: null, toolProvisioner: null);
+
+        Assert.DoesNotContain(outcome.Messages, m => m.Contains("Régi, projekt-specifikus Sonar Docker stack", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task InstallAsync_SonarEnabled_GeneratedPipelineIncludesSonarStep()
+    {
+        var installer = new SecurityToolkitInstaller(Templates());
+        var options = new InstallOptions(_root, NonInteractive: true, ConfigureOnly: true);
+        var profile = new Dictionary<string, object?>
+        {
+            ["tools"] = new Dictionary<string, object?> { ["sonar"] = true },
+            ["dotnetTargets"] = new List<object?> { "fake.sln" },
+            ["sonar"] = new Dictionary<string, object?> { ["dotnetTarget"] = "fake.sln" },
+        };
+
+        var outcome = await installer.InstallAsync(options, profile, toolProvisioner: null);
+
+        Assert.Equal(0, outcome.ExitCode);
+        var yaml = File.ReadAllText(Path.Combine(_root, "azure-security-toolkit.yml"));
+        Assert.Contains("--tool sonar", yaml);
+        Assert.Contains("--include-sonar", yaml);
+        Assert.Contains("SONAR_TOKEN: $(SONAR_TOKEN)", yaml);
+    }
+
+    private static Dictionary<string, object?> SonarCoverageProfile(IDictionary<string, object?> sonarExtras) => new()
+    {
+        ["tools"] = new Dictionary<string, object?> { ["sonar"] = true },
+        ["dotnetTargets"] = new List<object?> { "fake.sln" },
+        ["sonar"] = new Dictionary<string, object?>(sonarExtras) { ["dotnetTarget"] = "fake.sln" },
+    };
+
+    [Fact]
+    public async Task InstallAsync_SonarCoverageEnabled_MapsTestEnvironmentToPipelineVariablesAndEnablesDotnetCoverage()
+    {
+        var installer = new SecurityToolkitInstaller(Templates());
+        var options = new InstallOptions(_root, NonInteractive: true, ConfigureOnly: true);
+        var profile = SonarCoverageProfile(new Dictionary<string, object?>
+        {
+            ["coverage"] = true,
+            ["testEnvironment"] = new Dictionary<string, object?> { ["ConnectionStrings__Default"] = "TestDbConnectionString" },
+        });
+
+        var outcome = await installer.InstallAsync(options, profile, toolProvisioner: null);
+
+        Assert.Equal(0, outcome.ExitCode);
+        var yaml = File.ReadAllText(Path.Combine(_root, "azure-security-toolkit.yml"));
+        Assert.Contains("  env:\n    SONAR_TOKEN: $(SONAR_TOKEN)\n    ConnectionStrings__Default: $(TestDbConnectionString)\n", yaml.Replace("\r\n", "\n"));
+        Assert.Contains("- task: PublishCodeCoverageResults@2", yaml);
+        Assert.Contains(
+            "    summaryFileLocation: |\n" +
+            "      $(Build.SourcesDirectory)/.security/results/$(securityRunId)/dotnet-coverage.xml\n" +
+            "      $(Build.SourcesDirectory)/.security/results/$(securityRunId)/frontend-coverage-*/lcov.info\n",
+            yaml.Replace("\r\n", "\n"));
+
+        var lockData = ScannerSupport.ParseJsonObject(
+            await File.ReadAllTextAsync(Path.Combine(_root, ".security", SecurityToolkitInstaller.LockFileName)));
+        var dotnetCoverage = ScannerSupport.GetDictionary(ScannerSupport.GetDictionary(lockData, "tools")!, "dotnetCoverage")!;
+        Assert.True(ScannerSupport.GetBool(dotnetCoverage, "enabled"));
+        Assert.Equal("dotnet-coverage", ScannerSupport.GetString(dotnetCoverage, "package"));
+    }
+
+    [Fact]
+    public async Task InstallAsync_DevSkimIgnores_AreKeptAndValidated()
+    {
+        var installer = new SecurityToolkitInstaller(Templates());
+        var options = new InstallOptions(_root, NonInteractive: true, ConfigureOnly: true);
+        var valid = new Dictionary<string, object?>
+        {
+            ["devskim"] = new Dictionary<string, object?>
+            {
+                ["ignoreGlobs"] = new List<object?> { "**/*.Tests/**" },
+                ["ignoreRuleIds"] = new List<object?> { "DS162092" },
+            },
+        };
+
+        Assert.Equal(0, (await installer.InstallAsync(options, valid, toolProvisioner: null)).ExitCode);
+        var config = ScannerSupport.ParseJsonObject(
+            await File.ReadAllTextAsync(Path.Combine(_root, ".security", SecurityToolkitInstaller.ConfigFileName)));
+        Assert.Equal(new object?[] { "DS162092" }, ScannerSupport.GetList(ScannerSupport.GetDictionary(config, "devskim")!, "ignoreRuleIds"));
+
+        var invalid = new Dictionary<string, object?>
+        {
+            ["devskim"] = new Dictionary<string, object?> { ["ignoreGlobs"] = new List<object?> { "a/**,b/**" } },
+        };
+        var outcome = await installer.InstallAsync(options, invalid, toolProvisioner: null);
+        Assert.Equal(2, outcome.ExitCode);
+        Assert.Contains(outcome.Messages, m => m.Contains("devskim.ignoreGlobs", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task InstallAsync_SonarCoverageDisabled_IgnoresTestEnvironmentAndKeepsDotnetCoverageDisabled()
+    {
+        var installer = new SecurityToolkitInstaller(Templates());
+        var options = new InstallOptions(_root, NonInteractive: true, ConfigureOnly: true);
+        var profile = SonarCoverageProfile(new Dictionary<string, object?>
+        {
+            ["testEnvironment"] = new Dictionary<string, object?> { ["ConnectionStrings__Default"] = "TestDbConnectionString" },
+        });
+
+        var outcome = await installer.InstallAsync(options, profile, toolProvisioner: null);
+
+        Assert.Equal(0, outcome.ExitCode);
+        var yaml = File.ReadAllText(Path.Combine(_root, "azure-security-toolkit.yml"));
+        Assert.DoesNotContain("ConnectionStrings__Default", yaml);
+        Assert.DoesNotContain("PublishCodeCoverageResults", yaml);
+
+        var lockData = ScannerSupport.ParseJsonObject(
+            await File.ReadAllTextAsync(Path.Combine(_root, ".security", SecurityToolkitInstaller.LockFileName)));
+        var dotnetCoverage = ScannerSupport.GetDictionary(ScannerSupport.GetDictionary(lockData, "tools")!, "dotnetCoverage")!;
+        Assert.False(ScannerSupport.GetBool(dotnetCoverage, "enabled"));
+    }
+
+    [Theory]
+    [InlineData("Bad-Name", "TestDbConnectionString", "Invalid sonar.testEnvironment variable name")]
+    [InlineData("SONAR_TOKEN", "Other", "Invalid sonar.testEnvironment variable name")]
+    [InlineData("ConnectionStrings__Default", "$(Injected)", "must name an Azure pipeline variable")]
+    [InlineData("ConnectionStrings__Default", "Server=db;Password=x", "must name an Azure pipeline variable")]
+    public async Task InstallAsync_InvalidSonarTestEnvironment_ReturnsExitCode2WithoutThrowing(string name, string variable, string expectedMessage)
+    {
+        var installer = new SecurityToolkitInstaller(Templates());
+        var options = new InstallOptions(_root, NonInteractive: true, DryRun: true);
+        var profile = SonarCoverageProfile(new Dictionary<string, object?>
+        {
+            ["coverage"] = true,
+            ["testEnvironment"] = new Dictionary<string, object?> { [name] = variable },
+        });
+
+        var outcome = await installer.InstallAsync(options, profile, toolProvisioner: null);
+
+        Assert.Equal(2, outcome.ExitCode);
+        Assert.Contains(outcome.Messages, m => m.Contains(expectedMessage, StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task InstallAsync_SonarTestFilterWithQuote_ReturnsExitCode2WithoutThrowing()
+    {
+        var installer = new SecurityToolkitInstaller(Templates());
+        var options = new InstallOptions(_root, NonInteractive: true, DryRun: true);
+        var profile = SonarCoverageProfile(new Dictionary<string, object?>
+        {
+            ["coverage"] = true,
+            ["testFilter"] = "Category!=\"Db\"",
+        });
+
+        var outcome = await installer.InstallAsync(options, profile, toolProvisioner: null);
+
+        Assert.Equal(2, outcome.ExitCode);
+        Assert.Contains(outcome.Messages, m => m.Contains("sonar.testFilter", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task InstallAsync_SonarDisabled_GeneratedPipelineOmitsSonarStep()
+    {
+        var installer = new SecurityToolkitInstaller(Templates());
+        var options = new InstallOptions(_root, NonInteractive: true, ConfigureOnly: true);
+
+        await installer.InstallAsync(options, configProfile: null, toolProvisioner: null);
+
+        var yaml = File.ReadAllText(Path.Combine(_root, "azure-security-toolkit.yml"));
+        Assert.DoesNotContain("--tool sonar", yaml);
+        Assert.DoesNotContain("--include-sonar", yaml);
+        Assert.DoesNotContain("SONAR_TOKEN", yaml);
+    }
+
+    [Fact]
+    public async Task InstallAsync_DefaultConfig_GeneratedPipelineIncludesHistoryFlag()
+    {
+        var installer = new SecurityToolkitInstaller(Templates());
+        var options = new InstallOptions(_root, NonInteractive: true, ConfigureOnly: true);
+
+        await installer.InstallAsync(options, configProfile: null, toolProvisioner: null);
+
+        var yaml = File.ReadAllText(Path.Combine(_root, "azure-security-toolkit.yml"));
+        Assert.Contains("--tool gitleaks --mode Report --run-id $(securityRunId) --history", yaml);
+    }
+
+    [Fact]
+    public async Task InstallAsync_GeneratedPipeline_QuotesProjectRootInEveryScanStep()
+    {
+        var installer = new SecurityToolkitInstaller(Templates());
+        var options = new InstallOptions(_root, NonInteractive: true, ConfigureOnly: true);
+
+        await installer.InstallAsync(options, configProfile: null, toolProvisioner: null);
+
+        var yaml = File.ReadAllText(Path.Combine(_root, "azure-security-toolkit.yml"));
+        var scanSteps = yaml.Split('\n').Where(l => l.Contains("security-toolkit scan")).ToArray();
+        Assert.NotEmpty(scanSteps);
+        Assert.All(scanSteps, l => Assert.Contains("--project-root \"$(Build.SourcesDirectory)\"", l));
+    }
+
+    [Fact]
+    public async Task InstallAsync_PipelineHistoryDisabled_GeneratedPipelineOmitsHistoryFlag()
+    {
+        var installer = new SecurityToolkitInstaller(Templates());
+        var options = new InstallOptions(_root, NonInteractive: true, ConfigureOnly: true);
+        var profile = new Dictionary<string, object?> { ["pipelineHistory"] = false };
+
+        var outcome = await installer.InstallAsync(options, profile, toolProvisioner: null);
+
+        Assert.Equal(0, outcome.ExitCode);
+        var yaml = File.ReadAllText(Path.Combine(_root, "azure-security-toolkit.yml"));
+        Assert.Contains("--tool gitleaks --mode Report --run-id $(securityRunId)\r\n", yaml);
+        Assert.DoesNotContain("--history", yaml);
+    }
+
+    [Fact]
+    public async Task InstallAsync_EachEnabledTool_GetsItsOwnAlwaysRunStep()
+    {
+        var installer = new SecurityToolkitInstaller(Templates());
+        var options = new InstallOptions(_root, NonInteractive: true, ConfigureOnly: true);
+        var profile = new Dictionary<string, object?>
+        {
+            ["tools"] = new Dictionary<string, object?>
+            {
+                ["analyzers"] = true,
+                ["nuget"] = true,
+                ["npm"] = false,
+                ["semgrep"] = true,
+                ["gitleaks"] = true,
+                ["osv"] = false,
+                ["devskim"] = false,
+                ["sonar"] = false,
+            },
+            ["dotnetTargets"] = new List<object?> { "fake.sln" },
+        };
+
+        var outcome = await installer.InstallAsync(options, profile, toolProvisioner: null);
+        Assert.Equal(0, outcome.ExitCode);
+
+        var yaml = File.ReadAllText(Path.Combine(_root, "azure-security-toolkit.yml"));
+        Assert.Contains("displayName: 'Security scan: analyzers'", yaml);
+        Assert.Contains("displayName: 'Security scan: nuget'", yaml);
+        Assert.Contains("displayName: 'Security scan: semgrep'", yaml);
+        Assert.Contains("displayName: 'Security scan: gitleaks'", yaml);
+        Assert.DoesNotContain("displayName: 'Security scan: npm'", yaml);
+        Assert.DoesNotContain("displayName: 'Security scan: osv'", yaml);
+        Assert.DoesNotContain("displayName: 'Security scan: devskim'", yaml);
+        Assert.DoesNotContain("displayName: 'Security scan: sonar'", yaml);
+
+        // Every enabled tool's step is independent (a failure must not block the rest).
+        var toolStepCount = System.Text.RegularExpressions.Regex.Matches(yaml, "- script: security-toolkit scan").Count;
+        Assert.Equal(4, toolStepCount);
+        var alwaysConditionCount = System.Text.RegularExpressions.Regex.Matches(yaml, "condition: always\\(\\)").Count;
+        Assert.Equal(7, alwaysConditionCount); // 4 tool steps + PublishPipelineArtifact@1 + CopyFiles@2 + PublishBuildArtifacts@1
+    }
+
+    [Fact]
+    public async Task InstallAsync_GeneratedPipeline_NoLongerReferencesInvokeSecurityScanScript()
+    {
+        var installer = new SecurityToolkitInstaller(Templates());
+        var options = new InstallOptions(_root, NonInteractive: true, ConfigureOnly: true);
+
+        await installer.InstallAsync(options, configProfile: null, toolProvisioner: null);
+
+        var yaml = File.ReadAllText(Path.Combine(_root, "azure-security-toolkit.yml"));
+        Assert.DoesNotContain("Invoke-SecurityScan.ps1", yaml);
+        Assert.False(File.Exists(Path.Combine(_root, ".security", "Invoke-SecurityScan.ps1")));
+    }
+
+    [Fact]
+    public async Task InstallAsync_MissingProjectRoot_Throws()
+    {
+        var installer = new SecurityToolkitInstaller(Templates());
+        var options = new InstallOptions(Path.Combine(_root, "does-not-exist"), NonInteractive: true, DryRun: true);
+
+        await Assert.ThrowsAsync<DirectoryNotFoundException>(
+            () => installer.InstallAsync(options, configProfile: null, toolProvisioner: null));
+    }
+
+    [Fact]
+    public async Task InstallAsync_ConfigProfileWithUnknownKey_Throws()
+    {
+        var installer = new SecurityToolkitInstaller(Templates());
+        var options = new InstallOptions(_root, NonInteractive: true, DryRun: true);
+        var profile = new Dictionary<string, object?> { ["unknownKey"] = true };
+
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => installer.InstallAsync(options, profile, toolProvisioner: null));
+    }
+
+    [Fact]
+    public async Task InstallAsync_SemgrepScopeFrontendWithoutFrontendTarget_ReturnsExitCode2()
+    {
+        var installer = new SecurityToolkitInstaller(Templates());
+        var options = new InstallOptions(_root, NonInteractive: true, DryRun: true, SemgrepScope: SemgrepInstallScope.Frontend);
+
+        var outcome = await installer.InstallAsync(options, configProfile: null, toolProvisioner: null);
+
+        Assert.Equal(2, outcome.ExitCode);
+        Assert.Contains(outcome.Messages, m => m.Contains("Frontend Semgrep scope requires", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task InstallAsync_SonarEnabledWithoutDotnetTarget_ReturnsExitCode2WithoutThrowing()
+    {
+        var installer = new SecurityToolkitInstaller(Templates());
+        var options = new InstallOptions(_root, NonInteractive: true, DryRun: true);
+        var profile = new Dictionary<string, object?>
+        {
+            ["tools"] = new Dictionary<string, object?> { ["sonar"] = true },
+            ["dotnetTargets"] = new List<object?> { "fake.sln" },
+        };
+
+        var outcome = await installer.InstallAsync(options, profile, toolProvisioner: null);
+
+        Assert.Equal(2, outcome.ExitCode);
+        Assert.Contains(outcome.Messages, m => m.Contains("Sonar .NET target is required", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task InstallAsync_RerunAfterManualEdit_SkipsOwnedFileButStillCompletesTheRestOfTheRun()
+    {
+        var installer = new SecurityToolkitInstaller(Templates());
+        var options = new InstallOptions(_root, NonInteractive: true, ConfigureOnly: true);
+
+        await installer.InstallAsync(options, configProfile: null, toolProvisioner: null);
+
+        var runnerPath = Path.Combine(_root, ".security", "Toolkit.Common.ps1");
+        File.WriteAllText(runnerPath, "# manually hacked\n");
+
+        var outcome = await installer.InstallAsync(options, configProfile: null, toolProvisioner: null);
+
+        Assert.Equal(0, outcome.ExitCode);
+        Assert.Contains(outcome.Messages, m => m.Contains("Kihagyva", StringComparison.Ordinal) && m.Contains("Toolkit.Common.ps1", StringComparison.Ordinal));
+        Assert.Equal("# manually hacked\n", File.ReadAllText(runnerPath));
+        // Every other owned template still gets (re)written normally in the same run.
+        Assert.True(File.Exists(Path.Combine(_root, ".security", "gitleaks.toml")));
+    }
+
+    [Fact]
+    public async Task InstallAsync_CheckOnly_InSyncProject_ReportsAllUnchangedAndWritesNothing()
+    {
+        var installer = new SecurityToolkitInstaller(Templates());
+        var installOptions = new InstallOptions(_root, NonInteractive: true, ConfigureOnly: true);
+        await installer.InstallAsync(installOptions, configProfile: null, toolProvisioner: null);
+
+        var stateBefore = File.ReadAllText(Path.Combine(_root, ".security", "install-state.json"));
+
+        var checkOptions = new InstallOptions(_root, NonInteractive: true, CheckOnly: true);
+        var outcome = await installer.InstallAsync(checkOptions, configProfile: null, toolProvisioner: null);
+
+        Assert.Equal(0, outcome.ExitCode);
+        Assert.Null(outcome.ManifestPath);
+        Assert.NotNull(outcome.DriftEntries);
+        Assert.NotEmpty(outcome.DriftEntries!);
+        Assert.All(outcome.DriftEntries!, e => Assert.Equal(DriftStatus.Unchanged, e.Status));
+        // A check run must never touch install-state.json.
+        Assert.Equal(stateBefore, File.ReadAllText(Path.Combine(_root, ".security", "install-state.json")));
+    }
+
+    [Fact]
+    public async Task InstallAsync_CheckOnly_TemplateChangedSinceInstall_ReportsWouldUpdate()
+    {
+        var installer = new SecurityToolkitInstaller(Templates());
+        var installOptions = new InstallOptions(_root, NonInteractive: true, ConfigureOnly: true);
+        await installer.InstallAsync(installOptions, configProfile: null, toolProvisioner: null);
+
+        var updatedTemplates = new Dictionary<string, string>(Templates()) { ["gitleaks.toml"] = "# gitleaks config v2\n" };
+        var updatedInstaller = new SecurityToolkitInstaller(updatedTemplates);
+
+        var checkOptions = new InstallOptions(_root, NonInteractive: true, CheckOnly: true);
+        var outcome = await updatedInstaller.InstallAsync(checkOptions, configProfile: null, toolProvisioner: null);
+
+        Assert.Equal(0, outcome.ExitCode);
+        Assert.Contains(outcome.DriftEntries!, e => e.RelativePath == ".security/gitleaks.toml" && e.Status == DriftStatus.WouldUpdate);
+        Assert.Equal("# gitleaks config\r\n", File.ReadAllText(Path.Combine(_root, ".security", "gitleaks.toml")));
+    }
+
+    [Fact]
+    public async Task InstallAsync_CheckOnly_ManuallyEditedOwnedFile_ReportsManualChangesWithoutThrowing()
+    {
+        var installer = new SecurityToolkitInstaller(Templates());
+        var installOptions = new InstallOptions(_root, NonInteractive: true, ConfigureOnly: true);
+        await installer.InstallAsync(installOptions, configProfile: null, toolProvisioner: null);
+
+        var runnerPath = Path.Combine(_root, ".security", "Toolkit.Common.ps1");
+        File.WriteAllText(runnerPath, "# manually hacked\n");
+
+        var checkOptions = new InstallOptions(_root, NonInteractive: true, CheckOnly: true);
+        var outcome = await installer.InstallAsync(checkOptions, configProfile: null, toolProvisioner: null);
+
+        Assert.Equal(0, outcome.ExitCode);
+        Assert.Contains(outcome.DriftEntries!, e => e.RelativePath == ".security/Toolkit.Common.ps1" && e.Status == DriftStatus.ManualChangesDetected);
+        Assert.Equal("# manually hacked\n", File.ReadAllText(runnerPath));
+    }
+
+    [Fact]
+    public async Task InstallAsync_InstallHookEnabled_HookInvokesSharedPathExecutableNotAProjectLocalCopy()
+    {
+        var processRunner = new FakeProcessRunner();
+        processRunner.Enqueue("git", new ProcessResult(0, ".git/hooks\n", string.Empty));
+        if (!OperatingSystem.IsWindows())
+        {
+            processRunner.Enqueue("chmod", new ProcessResult(0, string.Empty, string.Empty));
+        }
+
+        var installer = new SecurityToolkitInstaller(Templates());
+        var options = new InstallOptions(_root, NonInteractive: true, ConfigureOnly: true);
+        var profile = new Dictionary<string, object?> { ["installHook"] = true };
+        var dependencies = new InstallerDependencies(
+            SemgrepRuleDownloader: null,
+            VsCodeExtensionInstaller: null,
+            GitHookInstaller: new GitHookInstaller(processRunner));
+
+        await installer.InstallAsync(options, profile, toolProvisioner: null, dependencies, targetSelector: null);
+
+        // No project-local executable copy is made anymore — the hook resolves "security-toolkit"
+        // from PATH (the shared, per-machine install), so re-running install.bat / install.sh upgrades every
+        // previously-installed hook without touching the target project.
+        var securityDirectory = Path.Combine(_root, ".security");
+        var localExecutablePath = Path.Combine(
+            securityDirectory, "bin", OperatingSystem.IsWindows() ? "security-toolkit.exe" : "security-toolkit");
+        Assert.False(File.Exists(localExecutablePath));
+
+        var hookPath = Path.Combine(_root, ".git", "hooks", "pre-commit");
+        Assert.True(File.Exists(hookPath));
+        var hookContent = File.ReadAllText(hookPath);
+        Assert.Contains("exec security-toolkit scan", hookContent, StringComparison.Ordinal);
+    }
+}

@@ -1,0 +1,17 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <!--
+    Install-time template files, embedded so a single-file published CLI never needs a companion templates directory on disk.
+  -->
+  <ItemGroup>
+    <EmbeddedResource Include="Installation\Templates\*" />
+    <EmbeddedResource Include="Infra\Templates\*" />
+  </ItemGroup>
+
+</Project>

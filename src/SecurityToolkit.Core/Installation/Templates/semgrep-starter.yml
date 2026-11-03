@@ -1,0 +1,20 @@
+# Generic review prompts, not a complete SAST ruleset. Enable registry/vendor rules too.
+rules:
+  - id: toolkit-js-eval-review
+    languages: [javascript, typescript]
+    message: Review dynamic eval usage and whether untrusted input can reach it.
+    severity: WARNING
+    pattern: eval(...)
+  # No Angular sanitizer-bypass rule here: the p/typescript registry rule
+  # (angular-bypasssecuritytrust) covers all five bypassSecurityTrust* calls, and a second
+  # rule only counted every hit twice.
+  - id: toolkit-csharp-process-review
+    languages: [csharp]
+    message: Review external process execution and input validation.
+    severity: WARNING
+    pattern: System.Diagnostics.Process.Start(...)
+  - id: toolkit-csharp-certificate-validation-review
+    languages: [csharp]
+    message: Unconditional acceptance of certificates disables validation.
+    severity: ERROR
+    pattern: $H.ServerCertificateCustomValidationCallback = (...) => true

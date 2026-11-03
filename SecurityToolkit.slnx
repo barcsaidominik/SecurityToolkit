@@ -1,0 +1,10 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/SecurityToolkit.Core/SecurityToolkit.Core.csproj" />
+    <Project Path="src/SecurityToolkit.Cli/SecurityToolkit.Cli.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/SecurityToolkit.Core.Tests/SecurityToolkit.Core.Tests.csproj" />
+    <Project Path="tests/SecurityToolkit.Cli.Tests/SecurityToolkit.Cli.Tests.csproj" />
+  </Folder>
+</Solution>

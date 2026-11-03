@@ -1,0 +1,30 @@
+title = "Security Toolkit generic secret rules"
+[extend]
+useDefault = true
+
+[[rules]]
+id = "configuration-secret-value"
+description = "Potential secret in JSON configuration; review the value"
+regex = '''(?i)"(?:JwtSecret|SigningKey|SecretKey|ApiKey|AccessToken|Password)"\s*:\s*"([^"\r\n]{8,})"'''
+secretGroup = 1
+path = '''(?i)(?:appsettings.*|.*config.*)\.json$'''
+
+[[rules]]
+id = "connection-password-value"
+description = "Potential database password in a connection string"
+regex = '''(?i)(?:password|pwd)\s*=\s*([^;\r\n"']{4,});'''
+secretGroup = 1
+
+[[rules]]
+id = "environment-password-value"
+description = "Potential password assigned through configuration"
+regex = '''(?im)^\s*(?:POSTGRES_PASSWORD|MYSQL_PASSWORD|MSSQL_SA_PASSWORD|DB_PASSWORD)\s*[:=]\s*["']?([^\s"'$\r\n]{4,})'''
+secretGroup = 1
+
+[[allowlists]]
+description = "Toolkit runtime data and vendored scanner rules only"
+paths = ['''(^|/)\.security/(?:results|backups|bin|npm-tools|vendor|sonar)/''']
+
+[[allowlists]]
+description = "Build output directories, never source (incl. SonarScanner's .sonarqube work dir)"
+paths = ['''(^|/)(?:bin|obj|\.sonarqube)/''']
