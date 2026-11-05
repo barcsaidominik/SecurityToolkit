@@ -48,7 +48,7 @@ public sealed class SonarScanner : IScanner
             return new[]
             {
                 new ScanResult("sonar", "repository", ScanStatus.NotRun, 0, Blocking: false,
-                    "Server upload is opt-in: use -IncludeSonar and a private project token."),
+                    "Server upload is opt-in: use --include-sonar and a private project token."),
             };
         }
 

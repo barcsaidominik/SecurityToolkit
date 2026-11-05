@@ -10,8 +10,11 @@ namespace SecurityToolkit.Core.Installation;
 /// Absolute path to the pre-change backup copy, or "" when <paramref name="Existed"/> is false
 /// (nothing to restore back to — restore just deletes the file).
 /// </param>
-/// <param name="NewHash">SHA-256 hex digest of the file's content after the write.</param>
-public sealed record TransactionChange(string Path, bool Existed, string Backup, string NewHash);
+/// <param name="NewHash">SHA-256 hex digest of the file's content after the write ("" for a deletion).</param>
+/// <param name="Deleted">
+/// The transaction deleted the file (a retired toolkit file); restore copies <paramref name="Backup"/> back.
+/// </param>
+public sealed record TransactionChange(string Path, bool Existed, string Backup, string NewHash, bool Deleted = false);
 
 /// <summary>
 /// The backup manifest.json schema: <c>{ schemaVersion: 1, changes: [...] }</c>.
@@ -24,12 +27,23 @@ public sealed record TransactionManifest(int SchemaVersion, IReadOnlyList<Transa
     public IDictionary<string, object?> ToJsonTree() => new Dictionary<string, object?>
     {
         ["schemaVersion"] = (long)SchemaVersion,
-        ["changes"] = Changes.Select(c => (object?)new Dictionary<string, object?>
+        ["changes"] = Changes.Select(c =>
         {
-            ["path"] = c.Path,
-            ["existed"] = c.Existed,
-            ["backup"] = c.Backup,
-            ["newHash"] = c.NewHash,
+            var entry = new Dictionary<string, object?>
+            {
+                ["path"] = c.Path,
+                ["existed"] = c.Existed,
+                ["backup"] = c.Backup,
+                ["newHash"] = c.NewHash,
+            };
+
+            // Written only when set, so manifests without deletions keep their earlier shape.
+            if (c.Deleted)
+            {
+                entry["deleted"] = true;
+            }
+
+            return (object?)entry;
         }).ToList(),
     };
 
@@ -69,13 +83,14 @@ public sealed record TransactionManifest(int SchemaVersion, IReadOnlyList<Transa
             var existed = changeDict.TryGetValue("existed", out var e) && e is bool eb && eb;
             var backup = changeDict.TryGetValue("backup", out var b) ? b as string ?? string.Empty : string.Empty;
             var newHash = changeDict.TryGetValue("newHash", out var h) ? h as string ?? string.Empty : string.Empty;
+            var deleted = changeDict.TryGetValue("deleted", out var d) && d is bool db && db;
 
             if (path is null)
             {
                 throw new InvalidOperationException("Malformed manifest change entry: missing path.");
             }
 
-            changes.Add(new TransactionChange(path, existed, backup, newHash));
+            changes.Add(new TransactionChange(path, existed, backup, newHash, deleted));
         }
 
         return new TransactionManifest(schemaVersion.Value, changes);

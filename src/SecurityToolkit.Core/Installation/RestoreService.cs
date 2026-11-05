@@ -33,6 +33,22 @@ public sealed class RestoreService
         {
             var path = ResolveProjectPath(root, change.Path);
 
+            if (change.Deleted)
+            {
+                if (File.Exists(path))
+                {
+                    throw new InvalidOperationException(
+                        $"Recreated since installation: {change.Path}. Restore refuses to overwrite later changes.");
+                }
+
+                if (!File.Exists(change.Backup))
+                {
+                    throw new InvalidOperationException($"Missing backup: {change.Path}");
+                }
+
+                continue;
+            }
+
             if (!File.Exists(path) || !string.Equals(ComputeSha256Hex(path), change.NewHash, StringComparison.OrdinalIgnoreCase))
             {
                 throw new InvalidOperationException(
@@ -58,7 +74,12 @@ public sealed class RestoreService
                 continue;
             }
 
-            if (change.Existed)
+            if (change.Deleted)
+            {
+                Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+                File.Copy(change.Backup, path, overwrite: false);
+            }
+            else if (change.Existed)
             {
                 File.Copy(change.Backup, path, overwrite: true);
             }

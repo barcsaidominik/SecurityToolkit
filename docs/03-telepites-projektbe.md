@@ -116,8 +116,8 @@ Exit code 0 és „In sync” üzenet. Nézd át a `.security/pending-actions.md
 | Fájl / mappa | Commit? | Megjegyzés |
 |---|---|---|
 | `.security/security.config.json` | **igen** | a csapat közös beállításai |
-| `.security/security.lock.json` | **igen** | az eszközök rögzített verziói/digestjei; a CI `-RequirePinned`-del erre épít |
-| `.security/*.ps1`, `SecurityToolkit.props`, `gitleaks.toml` | **igen** | toolkit által kezelt („owned”) fájlok, kézzel ne szerkeszd |
+| `.security/security.lock.json` | **igen** | az eszközök rögzített verziói/digestjei; a CI `provision --require-pinned`-del erre épít |
+| `.security/SecurityToolkit.props`, `gitleaks.toml` | **igen** | toolkit által kezelt („owned”) fájlok, kézzel ne szerkeszd |
 | `.security/rules/` | **igen** | a rögzített Semgrep-szabályok |
 | `.security/security.config.local.json.example` | **igen** | minta a lokális felülíráshoz |
 | `azure-security-toolkit.yml` | **igen** | a pipeline; kézzel ne szerkeszd |
@@ -260,11 +260,13 @@ a commit elbukik.
    `install.bat`, utána az agent-szolgáltatás újraindítása). Linuxon `sudo bash install.sh --no-infra`.
 2. A projektben: `security-toolkit install --project-root . --check`. Ez megmutatja, mi fog változni.
 3. `security-toolkit install --project-root . --non-interactive`, majd a változások commitolása.
-4. **A kivezetett owned-fájlokat kézzel kell törölni.** Ha egy új toolkit-verzió egy korábban
-   generált fájlt már nem ír (pl. a régi `.security/Invoke-SecurityScan.ps1`), a telepítő nem törli.
-   A kiadási megjegyzés jelzi, ha ilyen van.
+4. **A kivezetett toolkit-fájlokat a telepítő törli.** Ilyenek a korábbi verziók PowerShell-scriptjei
+   (`.security/Initialize-SecurityTools.ps1`, `Restore-SecurityToolkit.ps1`, `Toolkit.Common.ps1`,
+   `Invoke-SecurityScan.ps1`): ezeket ma a `security-toolkit provision` és `restore` váltja ki. Csak a
+   kézzel nem módosítottakat törli, mentéssel (a `restore` visszahozza őket); a kézzel módosítottakat
+   meghagyja, és a `pending-actions.md`-ben jelzi. A törlést is commitold.
 
-> **Owned fájl kézi módosítása.** A `.security/` alatti scripteket, a `gitleaks.toml`-t, a lockot és
+> **Owned fájl kézi módosítása.** A `.security/SecurityToolkit.props`-ot, a `gitleaks.toml`-t, a lockot és
 > a pipeline-YAML-t a toolkit kezeli, és hash-sel védi. Ha valaki kézzel módosította, a telepítés
 > azt az egy fájlt **nem írja felül, csendben a régi állapotában hagyja**, a többit frissíti, és a
 > kihagyott fájlt a kézi teendők (`pending-actions.md`) között jelzi. A `--check` ezeket

@@ -12,7 +12,7 @@ gépen vagy klónban egyszer elő kell készíteni őket. Pontosan ugyanez fut a
 
 ```powershell
 cd C:\Work\<repó>
-pwsh -File .security\Initialize-SecurityTools.ps1 -RequirePinned
+security-toolkit provision --project-root . --require-pinned
 ```
 
 Feltétel: a CLI a PATH-on (`install.bat --no-infra`, Linuxon `sudo bash install.sh --no-infra`), a Docker fut, és van .NET SDK (frontendhez Node).
@@ -118,6 +118,19 @@ security-toolkit install --project-root <útvonal> [kapcsolók]
 | `--semgrep-scope repository\|frontend` | a Semgrep-hatókör felülírása |
 
 Részletek: [3. fejezet](03-telepites-projektbe.md).
+
+### `provision`
+
+```
+security-toolkit provision --project-root <útvonal> [--require-pinned]
+```
+
+A `security.lock.json`-ban rögzített Docker-image-ek letöltése (és a digest ellenőrzése), valamint
+a rögzített verziójú .NET-eszközök (DevSkim, SonarScanner, dotnet-coverage) telepítése a
+`.security/bin/` alá. Az eredmény a `.security/results/setup-status.json`-ba kerül. A
+`--require-pinned` elutasítja a nem rögzített image-et vagy verziót: a pipeline és egy friss klón így
+fut (6.0). Nélküle a hiányzó pineket feloldja, és visszaírja a lockba. A teljes `install` a végén ugyanezt
+futtatja. Exit 0 = minden eszköz kész, 2 = legalább egy eszköz nem sikerült.
 
 ### `scan`
 

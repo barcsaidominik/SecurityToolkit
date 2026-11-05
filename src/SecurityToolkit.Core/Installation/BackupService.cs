@@ -22,6 +22,7 @@ public sealed class BackupService
     private readonly List<DriftEntry> _driftEntries = new();
     private readonly HashSet<string> _touchedRelativePaths = new(StringComparer.Ordinal);
     private readonly List<string> _skippedOwnedFiles = new();
+    private readonly List<string> _keptRetiredFiles = new();
     private readonly IDictionary<string, string> _priorHashes;
     private readonly bool _hasPriorInstall;
 
@@ -165,6 +166,59 @@ public sealed class BackupService
     }
 
     /// <summary>
+    /// Deletes a toolkit-owned file that the current toolkit no longer generates, backing it up
+    /// first and recording the deletion in the manifest (restore brings it back). Follows the
+    /// owned-file rule of <see cref="SaveManagedText"/>: a file whose content no longer matches
+    /// its last recorded hash was edited by hand, so it is kept and listed in
+    /// <see cref="KeptRetiredFiles"/>. Without a prior install (fresh clone) the committed file is
+    /// the baseline and is deleted (the deletion shows up in git).
+    /// </summary>
+    /// <returns>True when the file was (or, in check mode, would be) deleted.</returns>
+    public bool DeleteRetiredFile(string path)
+    {
+        if (!File.Exists(path))
+        {
+            return false;
+        }
+
+        var relative = ToProjectRelative(path);
+        if (_hasPriorInstall
+            && (!_priorHashes.TryGetValue(relative, out var expected) || !ToolkitFile.HashMatchesIgnoringLineEndings(path, expected)))
+        {
+            if (_checkOnly)
+            {
+                _driftEntries.Add(new DriftEntry(relative, DriftStatus.ManualChangesDetected));
+            }
+            else
+            {
+                _keptRetiredFiles.Add(relative);
+            }
+
+            return false;
+        }
+
+        if (_checkOnly)
+        {
+            _driftEntries.Add(new DriftEntry(relative, DriftStatus.WouldDelete));
+            return true;
+        }
+
+        var backup = Path.Combine(_securityDirectory, "backups", _runId, "files", relative.Replace('/', Path.DirectorySeparatorChar));
+        Directory.CreateDirectory(Path.GetDirectoryName(backup)!);
+        File.Copy(path, backup, overwrite: true);
+        File.Delete(path);
+
+        _changes.Add(new TransactionChange(relative, Existed: true, backup, NewHash: string.Empty, Deleted: true));
+        return true;
+    }
+
+    /// <summary>
+    /// Relative paths of retired files that <see cref="DeleteRetiredFile"/> kept because they were
+    /// edited by hand, in call order.
+    /// </summary>
+    public IReadOnlyList<string> KeptRetiredFiles => _keptRetiredFiles;
+
+    /// <summary>
     /// Writes the transaction's manifest.json and updates install-state.json with the final,
     /// post-write hashes of every touched/previously-known file. Call this exactly once, after every <see cref="SaveManagedText"/> call for the run.
     /// </summary>
@@ -253,6 +307,9 @@ public enum DriftStatus
 
     /// <summary>The file does not exist yet and would be created.</summary>
     WouldCreate,
+
+    /// <summary>A retired, unmodified toolkit file that would be deleted.</summary>
+    WouldDelete,
 
     /// <summary>
     /// An owned file's on-disk content no longer matches its last recorded hash — a real install

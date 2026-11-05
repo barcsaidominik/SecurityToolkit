@@ -74,7 +74,7 @@ megadott `.npmrc`-re.
 |---|---|
 | `checkout` | teljes klón (`fetchDepth: 0`), hogy a Gitleaks és a Sonar lássa a historyt |
 | `NuGetAuthenticate` | csak privát NuGet feednél |
-| **Initialize pinned security tools** | `.security/Initialize-SecurityTools.ps1 -RequirePinned`: a lockban rögzített digestű Docker-image-ek letöltése, a rögzített verziójú .NET-eszközök telepítése a `.security/bin/` alá. Ha valami nincs rögzítve, itt bukik el ([3.4](03-telepites-projektbe.md#34-telepítés-felügyelet-nélkül---non-interactive)). |
+| **Initialize pinned security tools** | `security-toolkit provision --require-pinned`: a lockban rögzített digestű Docker-image-ek letöltése, a rögzített verziójú .NET-eszközök telepítése a `.security/bin/` alá. Ha valami nincs rögzítve, itt bukik el ([3.4](03-telepites-projektbe.md#34-telepítés-felügyelet-nélkül---non-interactive)). |
 | **Security scan: `<eszköz>`** | minden bekapcsolt eszközre egy külön `security-toolkit scan --tool <eszköz> --mode Report --run-id $(securityRunId)` lépés, `condition: always()`-szel |
 | `PublishCodeCoverageResults@2` | csak `sonar.coverage: true` mellett: a .NET (`dotnet-coverage.xml`) és az Angular (`lcov.info`) coverage → a futás **Code Coverage** füle |
 | `PublishPipelineArtifact` | a `.security/results` → **`security-results`** artifact |
@@ -110,39 +110,7 @@ A YAML-ben `trigger: none` és `pr: none` van: a pipeline magától nem indul. �
 **Triggers** → *Scheduled* → *Add*. A UI-ban megadott ütemezés felülírja a YAML-t, ezért a YAML-hez
 nem kell nyúlni.
 
-## 4.5 Tükör-repó modell (ha a toolkit egy repó-másolatban fut)
-
-Bevezetéskor hasznos lehet, ha a toolkit nem közvetlenül a csapat repójába kerül, hanem egy
-**tükör-repóba**. Ennek `master`-e mindig = a forrás `master`-e + **pontosan egy** toolkit-commit. Így
-a csapat repója érintetlen marad, a pipeline mégis a friss kódon fut.
-
-A forrás új commitjai után a tükröt a SecurityToolkit repó scriptje frissíti:
-
-```powershell
-# próba: lokálisan felépíti az új commitot, semmit nem pushol
-.\tools\Sync-MirrorRepo.ps1 -SourceRepo C:\Work\<forrás> -TargetRepo C:\Work\<tükör> -DryRun
-# éles
-.\tools\Sync-MirrorRepo.ps1 -SourceRepo C:\Work\<forrás> -TargetRepo C:\Work\<tükör>
-```
-
-Mit csinál:
-- fetch-eli mindkét repót, és ellenőrzi, hogy a tükör tényleg „forrás + 1 commit” alakú;
-- a tükör `master`-ét a forrás `master`-ére állítja;
-- az előző toolkit-commitból átveszi a `.security/`-t és a pipeline-YAML-t;
-- a managed blokkokat `install --configure-only`-val újragenerálja (így a forrásban azóta megjelent
-  új projektek is bekerülnek), és `--check`-kel ellenőrzi;
-- a toolkit-commiton kívüli véletlen változásokat (pl. a megnyitott IDE által újragenerált fájlokat)
-  visszaállítja;
-- az előző állapotról `backup/master-<időbélyeg>` taget készít, majd `--force-with-lease`-szel pushol.
-
-Előfeltételek:
-- **ForcePush jog** a tükör-repón: *Project settings* → *Repositories* → a repó → *Security* →
-  a felhasználó → *Force push (rewrite history, delete branches and tags)*: **Allow**. A sima push-jog
-  ezt nem tartalmazza.
-- A CLI a PATH-on: egy régi terminálban ez hiányozhat, ilyenkor nyiss újat.
-- Tiszta munkaterület a tükör-klónban.
-
-## 4.6 Ellenőrzőlista
+## 4.5 Ellenőrzőlista
 
 - [ ] (szervezetenként egyszer) SARIF SAST Scans Tab extension
 - [ ] Pipeline létrehozva az `azure-security-toolkit.yml`-ből, és átnevezve

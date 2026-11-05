@@ -23,9 +23,6 @@ public class SecurityToolkitInstallerTests : IDisposable
 
     private static IReadOnlyDictionary<string, string> Templates() => new Dictionary<string, string>
     {
-        ["Toolkit.Common.ps1"] = "# common\n",
-        ["Initialize-SecurityTools.ps1"] = "# init\n",
-        ["Restore-SecurityToolkit.ps1"] = "# restore\n",
         ["SecurityToolkit.props"] = "<Project></Project>\n",
         ["gitleaks.toml"] = "# gitleaks config\n",
         ["semgrep-starter.yml"] = "rules: []\n",
@@ -137,7 +134,7 @@ public class SecurityToolkitInstallerTests : IDisposable
         var securityDirectory = Path.Combine(_root, ".security");
         Assert.True(File.Exists(Path.Combine(securityDirectory, SecurityToolkitInstaller.ConfigFileName)));
         Assert.True(File.Exists(Path.Combine(securityDirectory, SecurityToolkitInstaller.LockFileName)));
-        Assert.True(File.Exists(Path.Combine(securityDirectory, "Toolkit.Common.ps1")));
+        Assert.True(File.Exists(Path.Combine(securityDirectory, "SecurityToolkit.props")));
         Assert.True(File.Exists(Path.Combine(_root, ".gitignore")));
         Assert.Contains("ConfigureOnly", string.Join(' ', outcome.Messages));
     }
@@ -515,13 +512,13 @@ public class SecurityToolkitInstallerTests : IDisposable
 
         await installer.InstallAsync(options, configProfile: null, toolProvisioner: null);
 
-        var runnerPath = Path.Combine(_root, ".security", "Toolkit.Common.ps1");
+        var runnerPath = Path.Combine(_root, ".security", "SecurityToolkit.props");
         File.WriteAllText(runnerPath, "# manually hacked\n");
 
         var outcome = await installer.InstallAsync(options, configProfile: null, toolProvisioner: null);
 
         Assert.Equal(0, outcome.ExitCode);
-        Assert.Contains(outcome.Messages, m => m.Contains("Kihagyva", StringComparison.Ordinal) && m.Contains("Toolkit.Common.ps1", StringComparison.Ordinal));
+        Assert.Contains(outcome.Messages, m => m.Contains("Kihagyva", StringComparison.Ordinal) && m.Contains("SecurityToolkit.props", StringComparison.Ordinal));
         Assert.Equal("# manually hacked\n", File.ReadAllText(runnerPath));
         // Every other owned template still gets (re)written normally in the same run.
         Assert.True(File.Exists(Path.Combine(_root, ".security", "gitleaks.toml")));
@@ -573,14 +570,14 @@ public class SecurityToolkitInstallerTests : IDisposable
         var installOptions = new InstallOptions(_root, NonInteractive: true, ConfigureOnly: true);
         await installer.InstallAsync(installOptions, configProfile: null, toolProvisioner: null);
 
-        var runnerPath = Path.Combine(_root, ".security", "Toolkit.Common.ps1");
+        var runnerPath = Path.Combine(_root, ".security", "SecurityToolkit.props");
         File.WriteAllText(runnerPath, "# manually hacked\n");
 
         var checkOptions = new InstallOptions(_root, NonInteractive: true, CheckOnly: true);
         var outcome = await installer.InstallAsync(checkOptions, configProfile: null, toolProvisioner: null);
 
         Assert.Equal(0, outcome.ExitCode);
-        Assert.Contains(outcome.DriftEntries!, e => e.RelativePath == ".security/Toolkit.Common.ps1" && e.Status == DriftStatus.ManualChangesDetected);
+        Assert.Contains(outcome.DriftEntries!, e => e.RelativePath == ".security/SecurityToolkit.props" && e.Status == DriftStatus.ManualChangesDetected);
         Assert.Equal("# manually hacked\n", File.ReadAllText(runnerPath));
     }
 
@@ -616,5 +613,92 @@ public class SecurityToolkitInstallerTests : IDisposable
         Assert.True(File.Exists(hookPath));
         var hookContent = File.ReadAllText(hookPath);
         Assert.Contains("exec security-toolkit scan", hookContent, StringComparison.Ordinal);
+    }
+
+    /// <summary>Simulates a project installed by an older toolkit that still generated the PS scripts.</summary>
+    private async Task InstallWithRetiredScriptsAsync()
+    {
+        var oldTemplates = new Dictionary<string, string>(Templates());
+        var installer = new SecurityToolkitInstaller(oldTemplates);
+        await installer.InstallAsync(new InstallOptions(_root, NonInteractive: true, ConfigureOnly: true), configProfile: null, toolProvisioner: null);
+
+        // Write the old scripts and record their hashes the way an earlier install would have.
+        var securityDirectory = Path.Combine(_root, ".security");
+        var statePath = Path.Combine(securityDirectory, "install-state.json");
+        var state = SecurityToolkit.Core.Scanners.ScannerSupport.ParseJsonObject(File.ReadAllText(statePath));
+        var hashes = (IDictionary<string, object?>)state["hashes"]!;
+        foreach (var name in SecurityToolkitInstaller.RetiredSecurityFiles.Take(3))
+        {
+            var path = Path.Combine(securityDirectory, name);
+            File.WriteAllText(path, $"# {name}\n");
+            hashes[$".security/{name}"] = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(path)));
+        }
+
+        SecurityToolkit.Core.ToolkitJson.WriteFile(statePath, state);
+    }
+
+    [Fact]
+    public async Task InstallAsync_PipelineProvisionsThroughTheCliWithoutPowerShell()
+    {
+        var installer = new SecurityToolkitInstaller(Templates());
+        await installer.InstallAsync(new InstallOptions(_root, NonInteractive: true, ConfigureOnly: true), configProfile: null, toolProvisioner: null);
+
+        var yaml = File.ReadAllText(Path.Combine(_root, "azure-security-toolkit.yml"));
+        Assert.Contains("- script: security-toolkit provision --project-root \"$(Build.SourcesDirectory)\" --require-pinned", yaml);
+        Assert.DoesNotContain("PowerShell@2", yaml, StringComparison.Ordinal);
+        Assert.DoesNotContain(".ps1", yaml, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task InstallAsync_RetiredUnmodifiedScripts_AreDeletedAndRestorable()
+    {
+        await InstallWithRetiredScriptsAsync();
+
+        var outcome = await new SecurityToolkitInstaller(Templates()).InstallAsync(
+            new InstallOptions(_root, NonInteractive: true, ConfigureOnly: true), configProfile: null, toolProvisioner: null);
+
+        Assert.Equal(0, outcome.ExitCode);
+        foreach (var name in SecurityToolkitInstaller.RetiredSecurityFiles)
+        {
+            Assert.False(File.Exists(Path.Combine(_root, ".security", name)), name);
+        }
+
+        Assert.Contains(outcome.Messages, m => m.Contains("Kivezetett toolkit-fájlok törölve", StringComparison.Ordinal));
+        var state = File.ReadAllText(Path.Combine(_root, ".security", "install-state.json"));
+        Assert.DoesNotContain("Toolkit.Common.ps1", state, StringComparison.Ordinal);
+
+        var manifest = TransactionManifest.Parse(
+            SecurityToolkit.Core.Scanners.ScannerSupport.ParseJsonObject(File.ReadAllText(outcome.ManifestPath!)));
+        new RestoreService().Restore(_root, manifest);
+
+        Assert.Equal("# Toolkit.Common.ps1\n", File.ReadAllText(Path.Combine(_root, ".security", "Toolkit.Common.ps1")));
+    }
+
+    [Fact]
+    public async Task InstallAsync_RetiredScriptEditedByHand_IsKeptAndReported()
+    {
+        await InstallWithRetiredScriptsAsync();
+        var edited = Path.Combine(_root, ".security", "Restore-SecurityToolkit.ps1");
+        File.WriteAllText(edited, "# my own changes\n");
+
+        var outcome = await new SecurityToolkitInstaller(Templates()).InstallAsync(
+            new InstallOptions(_root, NonInteractive: true, ConfigureOnly: true), configProfile: null, toolProvisioner: null);
+
+        Assert.Equal("# my own changes\n", File.ReadAllText(edited));
+        Assert.False(File.Exists(Path.Combine(_root, ".security", "Toolkit.Common.ps1")));
+        Assert.Contains(outcome.Messages, m => m.Contains("kézzel módosítva", StringComparison.Ordinal)
+            && m.Contains(".security/Restore-SecurityToolkit.ps1", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task InstallAsync_CheckOnly_RetiredScript_ReportsWouldDeleteWithoutDeleting()
+    {
+        await InstallWithRetiredScriptsAsync();
+
+        var outcome = await new SecurityToolkitInstaller(Templates()).InstallAsync(
+            new InstallOptions(_root, NonInteractive: true, CheckOnly: true), configProfile: null, toolProvisioner: null);
+
+        Assert.Contains(outcome.DriftEntries!, e => e.RelativePath == ".security/Toolkit.Common.ps1" && e.Status == DriftStatus.WouldDelete);
+        Assert.True(File.Exists(Path.Combine(_root, ".security", "Toolkit.Common.ps1")));
     }
 }

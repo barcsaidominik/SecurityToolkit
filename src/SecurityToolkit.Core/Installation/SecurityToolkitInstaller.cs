@@ -37,8 +37,8 @@ public sealed record InstallerDependencies(
 
 /// <summary>
 /// Project-independent local security toolkit installer. Generates/updates the target project's
-/// ".security" directory (runners, common helper, props, rules, JSON config/lock, restore
-/// script), wires the project's Directory.Build.props/.editorconfig/.gitignore/.semgrepignore,
+/// ".security" directory (MSBuild props, rules, gitleaks config, JSON config/lock), retires
+/// files earlier versions generated, wires the project's Directory.Build.props/.editorconfig/.gitignore/.semgrepignore,
 /// and (unless <see cref="InstallOptions.ConfigureOnly"/>) provisions the enabled tools via
 /// <see cref="ToolProvisioner"/>.
 /// </summary>
@@ -195,6 +195,7 @@ public sealed class SecurityToolkitInstaller
         try
         {
             WriteOwnedTemplates(backup, securityDirectory, config);
+            RemoveRetiredFiles(backup, securityDirectory, messages, options.CheckOnly);
             backup.SaveManagedText(Path.Combine(securityDirectory, ConfigFileName), ToolkitJson.Serialize(config));
 
             WriteIgnoreBlocks(backup, root, config);
@@ -321,7 +322,7 @@ public sealed class SecurityToolkitInstaller
 
             if (GetBool(GetToolsDict(config), "sonar"))
             {
-                messages.Add("Sonar: admin belépés/jelszócsere, private projekt és project analysis token létrehozása szükséges. Token csak SONAR_TOKEN environment változóból. Feltöltés: -IncludeSonar. A közös Sonar-szervert gépenként egyszer az install.bat / install.sh (security-toolkit infra install --sonar) telepíti, a projekt-install nem indítja.");
+                messages.Add("Sonar: admin belépés/jelszócsere, private projekt és project analysis token létrehozása szükséges. Token csak SONAR_TOKEN environment változóból. Feltöltés: security-toolkit scan --include-sonar. A közös Sonar-szervert gépenként egyszer az install.bat / install.sh (security-toolkit infra install --sonar) telepíti, a projekt-install nem indítja.");
             }
 
             if (GetBool(config, "generatePipeline"))
@@ -674,16 +675,9 @@ public sealed class SecurityToolkitInstaller
 
     private void WriteOwnedTemplates(BackupService backup, string securityDirectory, IDictionary<string, object?> config)
     {
-        foreach (var name in new[]
+        if (_templateFiles.TryGetValue("SecurityToolkit.props", out var props))
         {
-            "Toolkit.Common.ps1", "Initialize-SecurityTools.ps1",
-            "Restore-SecurityToolkit.ps1", "SecurityToolkit.props",
-        })
-        {
-            if (_templateFiles.TryGetValue(name, out var content))
-            {
-                backup.SaveManagedText(Path.Combine(securityDirectory, name), content, owned: true);
-            }
+            backup.SaveManagedText(Path.Combine(securityDirectory, "SecurityToolkit.props"), props, owned: true);
         }
 
         // Not owned: a sample a developer may freely copy to security.config.local.json (gitignored)
@@ -703,6 +697,43 @@ public sealed class SecurityToolkitInstaller
         if (GetBool(tools, "semgrep") && _templateFiles.TryGetValue("semgrep-starter.yml", out var semgrepStarter))
         {
             backup.SaveManagedText(Path.Combine(securityDirectory, "rules", "starter.yml"), semgrepStarter, owned: true);
+        }
+    }
+
+    /// <summary>
+    /// Owned files earlier toolkit versions generated into ".security" and this one no longer
+    /// does: the PowerShell provisioning/restore scripts (replaced by <c>security-toolkit
+    /// provision</c> and <c>security-toolkit restore</c>) and the older standalone scan script.
+    /// </summary>
+    public static readonly IReadOnlyList<string> RetiredSecurityFiles = new[]
+    {
+        "Initialize-SecurityTools.ps1", "Restore-SecurityToolkit.ps1", "Toolkit.Common.ps1", "Invoke-SecurityScan.ps1",
+    };
+
+    private static void RemoveRetiredFiles(BackupService backup, string securityDirectory, List<string> messages, bool checkOnly)
+    {
+        var deleted = RetiredSecurityFiles
+            .Where(name => backup.DeleteRetiredFile(Path.Combine(securityDirectory, name)))
+            .Select(name => $".security/{name}")
+            .ToList();
+
+        if (checkOnly)
+        {
+            return;
+        }
+
+        if (deleted.Count > 0)
+        {
+            messages.Add(
+                "Kivezetett toolkit-fájlok törölve (a CLI váltja ki őket, a törlés restore-ral visszavonható): " +
+                string.Join(", ", deleted) + ". A törlést commitold.");
+        }
+
+        foreach (var relative in backup.KeptRetiredFiles)
+        {
+            messages.Add(
+                $"Kivezetett toolkit-fájl, de kézzel módosítva, ezért nem töröltem: {relative}. A toolkit már nem " +
+                "használja; ha nincs rá szükséged, töröld kézzel.");
         }
     }
 
@@ -928,13 +959,8 @@ public sealed class SecurityToolkitInstaller
         }
 
         yaml += "\n" +
-                "- task: PowerShell@2\n" +
-                "  displayName: Initialize pinned security tools\n" +
-                "  inputs:\n" +
-                "    pwsh: true\n" +
-                "    targetType: filePath\n" +
-                "    filePath: .security/Initialize-SecurityTools.ps1\n" +
-                "    arguments: -RequirePinned\n";
+                "- script: security-toolkit provision --project-root \"$(Build.SourcesDirectory)\" --require-pinned\n" +
+                "  displayName: Initialize pinned security tools\n";
 
         var tools = GetToolsDict(config);
         var historyEnabled = GetBool(config, "pipelineHistory");

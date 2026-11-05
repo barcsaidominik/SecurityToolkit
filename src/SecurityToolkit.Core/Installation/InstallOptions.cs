@@ -25,7 +25,7 @@ public enum SemgrepInstallScope
 /// selection.
 /// </param>
 /// <param name="ConfigureOnly">
-/// Generates/updates project files (security.config.json, runners, props, ignore blocks, pipeline YAML)
+/// Generates/updates project files (security.config.json, props, ignore blocks, pipeline YAML)
 /// but skips prerequisite installation, tool provisioning, rule downloads, and VS Code extensions.
 /// </param>
 /// <param name="DryRun">Prints the resolved configuration and writes nothing to disk.</param>

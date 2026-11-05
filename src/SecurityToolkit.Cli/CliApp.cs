@@ -13,6 +13,7 @@ public static class CliApp
     public static RootCommand BuildRootCommand() => new("SecurityToolkit CLI - install, scan, and restore the local security toolkit.")
     {
         InstallCommandFactory.Create(),
+        ProvisionCommandFactory.Create(),
         ScanCommandFactory.Create(),
         RestoreCommandFactory.Create(),
         ReportCommandFactory.Create(),

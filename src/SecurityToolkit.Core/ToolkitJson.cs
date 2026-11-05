@@ -8,8 +8,7 @@ namespace SecurityToolkit.Core;
 /// Deterministic, canonical JSON serialization: object keys sorted ordinally (case-sensitive),
 /// stable indentation, UTF-8 without a BOM, and a trailing newline. Determinism matters because
 /// security.lock.json is committed to git and must diff cleanly across reruns that don't actually
-/// change state. The generated ".security/Toolkit.Common.ps1" rewrites the same lock file in the
-/// pipeline (ConvertTo-ToolkitJson, Sort-Object -CaseSensitive); keep the two formats identical.
+/// change state (the pipeline's <c>security-toolkit provision</c> step rewrites the lock too).
 /// </summary>
 public static class ToolkitJson
 {

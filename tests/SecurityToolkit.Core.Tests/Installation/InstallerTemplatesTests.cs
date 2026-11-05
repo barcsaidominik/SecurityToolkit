@@ -12,13 +12,10 @@ public class InstallerTemplatesTests
         Assert.Equal(
             new[]
             {
-                "Toolkit.Common.ps1", "Initialize-SecurityTools.ps1",
-                "Restore-SecurityToolkit.ps1", "SecurityToolkit.props", "gitleaks.toml", "semgrep-starter.yml",
+                "SecurityToolkit.props", "gitleaks.toml", "semgrep-starter.yml",
                 "security.config.local.json.example",
             }.OrderBy(x => x, StringComparer.Ordinal),
             templates.Keys.OrderBy(x => x, StringComparer.Ordinal));
-
-        Assert.Contains("Get-ToolkitPath", templates["Toolkit.Common.ps1"]);
     }
 
     [Theory]

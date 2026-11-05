@@ -3,9 +3,8 @@ using System.Reflection;
 namespace SecurityToolkit.Core.Installation;
 
 /// <summary>
-/// Loads the install-time template files (runners, common helper, props, rule/config starters)
-/// embedded in this assembly under "Installation/Templates/", keyed by their original file name
-/// (e.g. "Toolkit.Common.ps1"). Embedding avoids a companion "templates/" directory on disk,
+/// Loads the install-time template files (MSBuild props, rule/config starters) embedded in this
+/// assembly under "Installation/Templates/", keyed by their original file name (e.g. "gitleaks.toml"). Embedding avoids a companion "templates/" directory on disk,
 /// which matters once the CLI is published as a single file.
 /// </summary>
 public static class InstallerTemplates

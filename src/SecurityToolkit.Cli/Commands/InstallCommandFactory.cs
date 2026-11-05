@@ -93,7 +93,10 @@ public static class InstallCommandFactory
                 new VsCodeExtensionInstaller(processRunner),
                 new GitHookInstaller(processRunner));
 
-            IConsolePrompts prompts = options.NonInteractive ? new NonInteractivePrompts() : new ConsolePrompts();
+            // --check and --dry-run never prompt, even without --non-interactive: InstallAsync would
+            // otherwise ask for target selection and block on stdin (e.g. in CI or over ssh).
+            var interactive = !options.NonInteractive && !options.CheckOnly && !options.DryRun;
+            IConsolePrompts prompts = interactive ? new ConsolePrompts() : new NonInteractivePrompts();
             SecurityToolkitInstaller.TargetSelector targetSelector = prompts.SelectTargets;
 
             var securityDirectoryForOverride = Path.Combine(Path.GetFullPath(options.ProjectRoot), ".security");
@@ -105,7 +108,6 @@ public static class InstallCommandFactory
             var runGlobalWizard = !globalExists;
             var runLocalWizard = !localExists;
 
-            var interactive = !options.NonInteractive && !options.CheckOnly && !options.DryRun;
             if (interactive)
             {
                 if (globalExists)

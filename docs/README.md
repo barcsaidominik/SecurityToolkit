@@ -59,9 +59,9 @@ DevSkim és SonarQube (coverage-dzsel). Részletesen: [06 – Helyi futtatás é
 
 ## Gyors útvonal (a teljes folyamat egy oldalon)
 
-1. CI-gép: Docker Desktop, .NET SDK, Node, PowerShell 7, Git, Chrome → `install.bat --sonar --mssql`
+1. CI-gép: Docker Desktop, .NET SDK, Node, Git, Chrome → `install.bat --sonar --mssql`
    rendszergazdaként → Azure DevOps agent telepítése szolgáltatásként → az agent-szolgáltatás
-   újraindítása. Linuxon: Docker Engine, `pwsh`, `sudo bash install.sh --sonar --mssql`, agent
+   újraindítása. Linuxon: Docker Engine, `sudo bash install.sh --sonar --mssql`, agent
    `svc.sh`-val. ([1. fejezet](01-gep-es-agent.md))
 2. Sonar: első belépés, jelszócsere, projekt létrehozása **kézzel**, project analysis token a
    pipeline-nak; a fejlesztőknek *Execute Analysis* jog, helyben mindenki a saját user tokenjét használja.

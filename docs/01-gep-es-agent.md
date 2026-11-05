@@ -42,19 +42,6 @@ winget install --id OpenJS.NodeJS.LTS --scope machine -e
 winget install --id Google.Chrome --scope machine -e
 ```
 
-### PowerShell 7 – MSI-ből, ne a Store-ból vagy wingetről
-
-A generált pipeline első lépése `pwsh`-t (PowerShell 7) hív. A Microsoft Store-os és a winget által
-telepített változat egy felhasználói „App Execution Alias”-t kap, ami **nem kerül a gépi PATH-ra**, így
-a szolgáltatásként futó agent nem találja. Ezért MSI-ből kell telepíteni:
-
-1. Töltsd le a legfrissebb `PowerShell-<verzió>-win-x64.msi` fájlt a
-   [PowerShell GitHub release-oldaláról](https://github.com/PowerShell/PowerShell/releases).
-2. Rendszergazdaként:
-   ```powershell
-   msiexec /i PowerShell-<verzió>-win-x64.msi /quiet ADD_PATH=1 ENABLE_PSREMOTING=0
-   ```
-
 ### Docker Desktop
 
 1. Telepítsd a [Docker Desktopot](https://www.docker.com/products/docker-desktop/) a WSL2 backenddel.
@@ -180,7 +167,7 @@ security-toolkit --help
    Get-Service vstsagent* | Restart-Service
    ```
 
-> **Ezt minden PATH-változás után meg kell ismételni** (`install.bat`, új SDK/Node/PowerShell
+> **Ezt minden PATH-változás után meg kell ismételni** (`install.bat`, új SDK/Node
 > telepítése). Különben a pipeline a régi PATH-szal fut, és „`security-toolkit` is not recognized”
 > vagy hasonló hibát ad.
 
@@ -197,7 +184,6 @@ security-toolkit --help
        whoami
        security-toolkit --version
        docker version
-       pwsh -v
        dotnet --version
        node -v
        git --version
@@ -210,7 +196,7 @@ security-toolkit --help
 ## 1.6 Ellenőrzőlista
 
 - [ ] 16 GB RAM, virtualizáció be, Windows Update ablak beállítva
-- [ ] Git, .NET SDK, Node, Chrome gépi szinten, PowerShell 7 MSI-ből (`ADD_PATH=1`)
+- [ ] Git, .NET SDK, Node, Chrome gépi szinten
 - [ ] Docker Desktop: indul bejelentkezéskor, auto-update ki, `.wslconfig` beállítva
 - [ ] `NT AUTHORITY\NETWORK SERVICE` a `docker-users` csoportban
 - [ ] Autologon + automatikus zárolás, újraindítás után a `docker ps` működik
@@ -235,7 +221,6 @@ kapcsolója (winget) Linuxon nem telepít, csak jelzi, mi hiányzik. Szükséges
 | Git | `apt install git` |
 | .NET 10 SDK | [Microsoft-csomagtár vagy `dotnet-install.sh`](https://learn.microsoft.com/dotnet/core/install/linux) |
 | Node.js LTS | csak frontendhez; pl. a NodeSource-csomagtárból |
-| PowerShell 7 (`pwsh`) | a pipeline *Initialize* lépése és a `.security/*.ps1` scriptek miatt; [telepítés Linuxra](https://learn.microsoft.com/powershell/scripting/install/installing-powershell-on-linux) |
 | Docker Engine + Compose plugin | [docs.docker.com/engine/install](https://docs.docker.com/engine/install/), `docker-compose-plugin` csomaggal |
 | Chrome vagy Chromium | csak a frontend-coverage-hez (`ng test`); más útvonalnál `CHROME_BIN` |
 
@@ -286,8 +271,8 @@ tulajdonú). Az `infra` parancsokat ezért `sudo`-val kell futtatni, pl.
    `sudo ./svc.sh stop && sudo ./svc.sh start`. A `docker` csoporttagság is csak újraindítás után
    érvényes.
 
-A generált pipeline-on nem kell változtatni. A `script:` lépések Linuxon bash-ben futnak, az
-*Initialize* lépés `pwsh`-ban, a toolkit pedig minden útvonalat platformfüggetlenül kezel. A
+A generált pipeline-on nem kell változtatni: minden lépése `security-toolkit` hívás (`script:`, Linuxon
+bash-ben), PowerShell nem kell hozzá, a toolkit pedig minden útvonalat platformfüggetlenül kezel. A
 scanner-konténerek (Semgrep, Gitleaks, OSV) Linuxon az agent felhasználójának uid/gid-jével futnak.
 Így a riportfájlok nem lesznek root tulajdonúak, és a következő checkout (`clean: true`) is le tudja
 törölni őket.
@@ -297,7 +282,7 @@ törölni őket.
 
 ### Ellenőrzőlista (Linux)
 
-- [ ] Git, .NET SDK, Node, `pwsh`, Docker Engine + Compose plugin, Chrome/Chromium gépi szinten
+- [ ] Git, .NET SDK, Node, Docker Engine + Compose plugin, Chrome/Chromium gépi szinten
 - [ ] `sudo bash install.sh` lefutott, a `security-toolkit --version` bármelyik felhasználóval működik
 - [ ] Dedikált agent-felhasználó a `docker` csoportban, az agent `svc.sh`-val szolgáltatásként fut
 - [ ] A próba-pipeline minden parancsa lefut

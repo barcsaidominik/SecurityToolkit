@@ -24,6 +24,15 @@ public class CommandParsingTests
     }
 
     [Fact]
+    public void Provision_ParsesAllOptions()
+    {
+        var parseResult = CliApp.BuildRootCommand().Parse(new[] { "provision", "--project-root", ".", "--require-pinned" });
+
+        Assert.Empty(parseResult.Errors);
+        Assert.Equal("provision", parseResult.CommandResult.Command.Name);
+    }
+
+    [Fact]
     public void InfraInstall_ParsesAllOptions()
     {
         var parseResult = CliApp.BuildRootCommand().Parse(new[]

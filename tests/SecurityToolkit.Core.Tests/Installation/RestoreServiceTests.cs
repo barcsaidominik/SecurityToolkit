@@ -179,4 +179,44 @@ public class RestoreServiceTests : IDisposable
 
         Assert.Throws<InvalidOperationException>(() => TransactionManifest.Parse(tree));
     }
+
+    [Fact]
+    public void Restore_DeletedEntry_RecreatesFileFromBackup_AndRefusesIfRecreatedMeanwhile()
+    {
+        var backupFile = Path.Combine(_root, ".security", "backups", "run-1", "files", "old.ps1");
+        Directory.CreateDirectory(Path.GetDirectoryName(backupFile)!);
+        File.WriteAllText(backupFile, "# old\n");
+        var manifest = new TransactionManifest(1, new[]
+        {
+            new TransactionChange(".security/old.ps1", Existed: true, backupFile, NewHash: string.Empty, Deleted: true),
+        });
+
+        var target = Path.Combine(_root, ".security", "old.ps1");
+        File.WriteAllText(target, "# someone recreated it\n");
+        Assert.Throws<InvalidOperationException>(() => new RestoreService().Restore(_root, manifest));
+        Assert.Equal("# someone recreated it\n", File.ReadAllText(target));
+
+        File.Delete(target);
+        new RestoreService().Restore(_root, manifest);
+        Assert.Equal("# old\n", File.ReadAllText(target));
+    }
+
+    [Fact]
+    public void Manifest_DeletedFlag_RoundTripsAndIsOmittedWhenFalse()
+    {
+        var manifest = new TransactionManifest(1, new[]
+        {
+            new TransactionChange("a.txt", Existed: true, "b", "h"),
+            new TransactionChange("c.txt", Existed: true, "d", string.Empty, Deleted: true),
+        });
+
+        var tree = manifest.ToJsonTree();
+        var changes = (IList<object?>)tree["changes"]!;
+        Assert.False(((IDictionary<string, object?>)changes[0]!).ContainsKey("deleted"));
+
+        var parsed = TransactionManifest.Parse(
+            SecurityToolkit.Core.Scanners.ScannerSupport.ParseJsonObject(SecurityToolkit.Core.ToolkitJson.Serialize(tree)));
+        Assert.False(parsed.Changes[0].Deleted);
+        Assert.True(parsed.Changes[1].Deleted);
+    }
 }

@@ -19,6 +19,14 @@ public class ExitCodeTests : IDisposable
     }
 
     [Fact]
+    public async Task Provision_WithoutInstalledToolkit_ExitsTwo()
+    {
+        var parseResult = CliApp.BuildRootCommand().Parse(new[] { "provision", "--project-root", _root, "--require-pinned" });
+
+        Assert.Equal(2, await parseResult.InvokeAsync());
+    }
+
+    [Fact]
     public async Task Install_DryRun_ExitsZero()
     {
         var root = CliApp.BuildRootCommand();
@@ -30,6 +38,52 @@ public class ExitCodeTests : IDisposable
         var exitCode = await parseResult.InvokeAsync();
 
         Assert.Equal(0, exitCode);
+    }
+
+    [Theory]
+    [InlineData("--check")]
+    [InlineData("--dry-run")]
+    public async Task Install_CheckOrDryRun_WithoutNonInteractive_NeverReadsStdin(string mode)
+    {
+        // A discovered solution makes the target selector a real prompt candidate.
+        await File.WriteAllTextAsync(Path.Combine(_root, "Sample.slnx"), "<Solution />");
+        var configure = CliApp.BuildRootCommand().Parse(new[]
+        {
+            "install", "--project-root", _root, "--configure-only", "--non-interactive",
+        });
+        Assert.Equal(0, await configure.InvokeAsync());
+
+        var stdin = new CountingEmptyReader();
+        var originalIn = Console.In;
+        Console.SetIn(stdin);
+        try
+        {
+            var parseResult = CliApp.BuildRootCommand().Parse(new[] { "install", "--project-root", _root, mode });
+            Assert.NotEqual(2, await parseResult.InvokeAsync());
+        }
+        finally
+        {
+            Console.SetIn(originalIn);
+        }
+
+        Assert.Equal(0, stdin.Reads);
+    }
+
+    private sealed class CountingEmptyReader : TextReader
+    {
+        public int Reads { get; private set; }
+
+        public override int Read()
+        {
+            Reads++;
+            return -1;
+        }
+
+        public override string? ReadLine()
+        {
+            Reads++;
+            return null;
+        }
     }
 
     [Fact]

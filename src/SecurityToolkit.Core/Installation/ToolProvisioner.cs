@@ -10,8 +10,8 @@ public sealed record ProvisionOutcome(bool Completed, IReadOnlyList<string> Erro
 /// <summary>
 /// Provisions the tools recorded in security.lock.json: pulls + digest-pins the Docker images,
 /// and installs/validates the pinned .NET tool versions. Writes back the updated lock
-/// (now-ready/pinned entries) plus ".security/results/setup-status.json". The generated
-/// ".security/Initialize-SecurityTools.ps1" does the same in the pipeline; keep the two in sync.
+/// (now-ready/pinned entries) plus ".security/results/setup-status.json". Runs at the end of a
+/// full install and, with <c>requirePinned</c>, as the pipeline's <c>security-toolkit provision</c> step.
 /// </summary>
 public sealed class ToolProvisioner
 {

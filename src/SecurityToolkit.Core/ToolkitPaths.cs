@@ -1,8 +1,7 @@
 namespace SecurityToolkit.Core;
 
 /// <summary>
-/// Path-safety helpers. Security-critical: behavior must not be weakened here. The generated
-/// ".security/Toolkit.Common.ps1" has the same check (Get-ToolkitPath); keep the two in sync.
+/// Path-safety helpers. Security-critical: behavior must not be weakened here.
 /// </summary>
 public static class ToolkitPaths
 {

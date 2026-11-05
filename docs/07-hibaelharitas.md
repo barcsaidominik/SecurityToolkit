@@ -9,7 +9,6 @@ A tünet szerint keresd ki a hibát. Szinte mindegyik élesben előfordult már.
 | Tünet | Ok | Megoldás |
 |---|---|---|
 | A pipeline-ban: `'security-toolkit' is not recognized…` | az agent-szolgáltatás még a régi PATH-szal fut | `Get-Service vstsagent* \| Restart-Service` ([1.5](01-gep-es-agent.md#15-az-agent-telepítése-windows-szolgáltatásként)). Terminálban: nyiss újat. |
-| A pipeline-ban: `pwsh` not found az *Initialize* lépésnél | a PowerShell 7 a Store-ból vagy wingetről települt (felhasználói alias, nincs a gépi PATH-on) | MSI-ből `ADD_PATH=1`-gyel ([1.2](01-gep-es-agent.md#powershell-7--msi-ből-ne-a-store-ból-vagy-wingetről)), majd az agent újraindítása |
 | `permission denied … npipe:////./pipe/docker_engine`, vagy a `docker version`-ben nincs *Server* rész | a `NETWORK SERVICE` nem tagja a `docker-users` csoportnak | `Add-LocalGroupMember -Group docker-users -Member "NT AUTHORITY\NETWORK SERVICE"`, majd az agent újraindítása |
 | `error during connect` / a Docker nem fut újraindítás után | nincs bejelentkezett felhasználó, ezért a Docker Desktop nem indult el | Autologon ([1.2](01-gep-es-agent.md#automatikus-bejelentkezés-autologon)). Jelszóváltozás után újra be kell állítani. |
 | Éjszakai futás félbeszakad | a Windows Update újraindította a gépet | a Használati idő / karbantartási ablak és az ütemezés összehangolása ([4.4](04-pipeline.md#44-ütemezés)) |
@@ -27,7 +26,7 @@ A tünet szerint keresd ki a hibát. Szinte mindegyik élesben előfordult már.
 | `Image must be pinned first by the installer.` | a lockban nincs digest (csak `--configure-only` futott, vagy egy új eszközt kapcsoltak be) | teljes `security-toolkit install --project-root . --non-interactive` egy Dockeres gépen, a `security.lock.json` commitolása ([3.4](03-telepites-projektbe.md#34-telepítés-felügyelet-nélkül---non-interactive)) |
 | `Pin the .NET tool version first.` | ugyanez a DevSkim / SonarScanner / dotnet-coverage esetén | ugyanaz |
 | A telepítés lefut, de egy fájl nem frissül | az owned fájlt valaki kézzel módosította, ezért a telepítő kihagyta | `install --check` → `ManualChangesDetected`; a kézi módosítás visszavonása ([3.7](03-telepites-projektbe.md#37-karbantartás-és-frissítés)) |
-| Egy régi, már nem használt `.security/*.ps1` (pl. `Invoke-SecurityScan.ps1`) megmaradt | a telepítő nem törli a kivezetett owned fájlokat | kézzel törölni és commitolni |
+| Egy régi `.security/*.ps1` (pl. `Toolkit.Common.ps1`) az install után is megmaradt | kézzel módosították, ezért a telepítő nem törölte (a `pending-actions.md` jelzi) | ha nem kell, kézzel törölni és commitolni |
 | A régi config `toolkit.json` / `toolkit.lock.json` nevű | egy korábbi, sosem éles iteráció maradványa, nincs migráció | törölni, és újratelepíteni |
 
 ## Scannerek
@@ -70,9 +69,6 @@ A tünet szerint keresd ki a hibát. Szinte mindegyik élesben előfordult már.
 |---|---|---|
 | Commitnál: `security-toolkit: not found` | a git a CLI telepítése előtt indított shellből vagy GUI-ból fut | új terminál, illetve a git-kliens (IDE) újraindítása. Ne használj `--no-verify`-t. |
 | Commitnál a hook `FileNotFoundException`-nel elhasal egy ágon | **ismert korlát:** a hook minden ágon lefut, és egy olyan ágon, ahol nincs `.security/security.config.json`, elbukik | olyan ágon dolgozz, amelyen a toolkit telepítve van |
-| `Sync-MirrorRepo.ps1`: `TF401027` push-hiba | nincs ForcePush jog a tükör-repón | [4.5](04-pipeline.md#45-tükör-repó-modell-ha-a-toolkit-egy-repó-másolatban-fut) |
-| `Sync-MirrorRepo.ps1`: „not 'source + 1 toolkit commit'” | valaki közvetlenül commitolt a tükör `master`-ére | a tükör kézi rendbetétele: `master` = forrás + egy toolkit-commit |
-| `Sync-MirrorRepo.ps1` figyelmeztet: „Reverting non-toolkit changes” | egy megnyitott IDE újragenerált fájlokat (pl. `*.Designer.cs`) a checkout közben | nem hiba, a script visszaállítja őket; a futtatás idejére érdemes bezárni az IDE-t |
 
 ## Ha egyik sem illik
 

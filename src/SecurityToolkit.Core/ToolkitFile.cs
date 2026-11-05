@@ -3,7 +3,7 @@ using System.Text;
 namespace SecurityToolkit.Core;
 
 /// <summary>
-/// Writes text files the way every toolkit-managed/generated file (config, lock, PS runners,
+/// Writes text files the way every toolkit-managed/generated file (config, lock, props,
 /// pipeline YAML, ignore blocks, gitleaks.toml, ...) is expected to look on disk: UTF-8 without a
 /// byte-order mark, CRLF line endings. CRLF specifically because these files live in the target
 /// project's working tree and are routinely opened in Visual Studio, which otherwise flags every
