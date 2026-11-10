@@ -146,7 +146,8 @@ leállítást tiszteletben tartják. A pipeline itt is mindig **Report** módban
 
 A workflow **self-hosted runnert** vár, amin a `security-toolkit` a gépi PATH-on van (ugyanaz a gép és
 ugyanaz az `install.bat` / `install.sh`, mint az Azure agentnél, ld. [1. fejezet](01-gep-es-agent.md)).
-GitHub-hosted runneren nincs ott a CLI, ott a workflow első lépése elbukik.
+GitHub-hosted runneren nincs ott a CLI; ehhez a workflow-nak előbb le kell töltenie, ld.
+[4.7](#47-efemer-vagy-hosted-agent-a-cli-letöltése-release-ből).
 
 1. Repó → *Settings* → *Actions* → *Runners* → **New self-hosted runner**, és kövesd a GitHub
    telepítési lépéseit. A runnert szolgáltatásként telepítsd (Windowson a `config.cmd` kérdésére,
@@ -198,5 +199,52 @@ PR-jait ne olvaszd be: zárd le őket, vagy a `dependabot.yml`-ben hagyd ki a `g
 - az *Actions* fülön megjelent a **Security Toolkit** workflow, és kézzel elindítva minden lépés lefut;
 - a futás *Summary* oldalán ott a **`security-results`** artifact;
 - ha be van kapcsolva: a *Security → Code scanning* oldalon megjelentek a találatok.
+
+## 4.7 Efemer vagy hosted agent: a CLI letöltése release-ből
+
+Alapból mindkét pipeline arra számít, hogy az agenten a `security-toolkit` már a PATH-on van
+(`install.bat` / `install.sh`, [1. fejezet](01-gep-es-agent.md)). Egy minden futásra újonnan induló agenten
+(Microsoft-hosted, GitHub-hosted, scale-set) ez nincs meg. Ilyenkor add meg a `security.config.json`-ban,
+melyik kiadott verziót töltse le a pipeline:
+
+```json
+"toolkitRelease": { "version": "1.2.0" }
+```
+
+Ezután **teljes** (`--configure-only` nélküli) install kell. A telepítő letölti a release `SHA256SUMS`
+fájlját, a három bináris hash-ét a `security.lock.json`-ba rögzíti, és a pipeline-ba a provision elé
+beír egy telepítő lépést:
+
+- Linux agenten (x64 és arm64) bash: `curl`-lel letölti a binárist, `sha256sum`-mal ellenőrzi a rögzített
+  hash-t, és a PATH elejére teszi;
+- Windows agenten (x64) cmd: ugyanez `curl.exe`-vel és `certutil`-lal. PowerShell itt sem kell.
+
+Ha a letöltött fájl hash-e nem egyezik a rögzítettel (a release-t utólag kicserélték, vagy valaki
+belenyúlt a letöltésbe), a lépés elbukik, és a pipeline nem futtatja a fájlt. Ha a hash-ek még nincsenek
+rögzítve (csak `--configure-only` futott), a lépés egy erről szóló üzenettel áll meg.
+
+**Verzióváltás:** írd át a `toolkitRelease.version`-t, futtass teljes installt, és commitold a config, a
+lock és a pipeline változását. Ha a gépeken `install.bat`-tal telepített CLI-t használsz, a `version`
+maradjon üres: ilyenkor a pipeline nem tölt le semmit.
+
+**Saját tükör:** ha a GitHubot az agent nem éri el, a `toolkitRelease.baseUrl` egy belső szerverre is
+mutathat, ugyanazzal a szerkezettel (`<baseUrl>/v<verzió>/<fájl>`, a `SHA256SUMS`-szal együtt). Csak
+`https://` URL fogadható el.
+
+**Hosted agent kiválasztása:**
+- Azure: `"azureVmImage": "ubuntu-latest"`. Ekkor a YAML `pool: vmImage:` lesz, az `agentPool` nem
+  számít.
+- GitHub: `"githubRunsOn": ["ubuntu-latest"]`.
+
+Hosted agentnél ezekre figyelj:
+- **Linux image-et válassz.** A Semgrep, a Gitleaks és az OSV Linux-konténerben fut, a Windows-os hosted
+  agentek Dockere viszont csak Windows-konténert futtat.
+- **A Sonar-szervernek elérhetőnek kell lennie** az agentről. Egy belső hálózati gépen futó Sonart egy
+  felhős agent nem ér el; ilyenkor kapcsold ki a Sonar-lépést, vagy maradj a self-hosted agentnél.
+- A provision minden futáskor újra letölti az image-eket és a .NET-eszközöket, ezért a futás lassabb,
+  mint egy meleg self-hosted gépen.
+
+**Ellenőrzés:** a futás naplójában az *Install security-toolkit &lt;verzió&gt;* lépés zöld, és a következő
+lépés (*Initialize pinned security tools*) már megtalálja a `security-toolkit` parancsot.
 
 [Következő: 5. Kiértékelés →](05-kiertekeles.md)

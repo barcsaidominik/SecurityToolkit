@@ -175,9 +175,22 @@ public static class InteractiveConfigBuilder
             config["pipelineHistory"] = prompts.ReadYesNo(
                 "Gitleaks a teljes elérhető git history-t vizsgálja (-History)? (nem=csak working tree)", ScannerSupport.GetBool(config, "pipelineHistory"));
 
+            if (ScannerSupport.GetDictionary(config, "toolkitRelease") is { } toolkitRelease)
+            {
+                toolkitRelease["version"] = prompts.ReadValue(
+                    "Efemer/hosted agenthez: a pipeline töltse le a security-toolkit ezen release-verzióját (pl. 1.2.0), üres=a gépi PATH-on lévő CLI",
+                    ScannerSupport.GetString(toolkitRelease, "version") ?? string.Empty);
+            }
+
             if (providers.Contains("azure"))
             {
-                config["agentPool"] = prompts.ReadValue("Azure self-hosted agent pool neve", ScannerSupport.GetString(config, "agentPool") ?? "SecurityToolkit");
+                config["azureVmImage"] = prompts.ReadValue(
+                    "Microsoft-hosted Azure image (pl. ubuntu-latest), üres=self-hosted pool",
+                    ScannerSupport.GetString(config, "azureVmImage") ?? string.Empty);
+                if (string.IsNullOrEmpty(ScannerSupport.GetString(config, "azureVmImage")))
+                {
+                    config["agentPool"] = prompts.ReadValue("Azure self-hosted agent pool neve", ScannerSupport.GetString(config, "agentPool") ?? "SecurityToolkit");
+                }
                 config["privateNuGet"] = prompts.ReadYesNo("NuGetAuthenticate task kell privát feedhez?", ScannerSupport.GetBool(config, "privateNuGet"));
                 config["privateNpmRc"] = prompts.ReadValue(
                     "Privát npm .npmrc relatív útvonala, üres=nem kell task", ScannerSupport.GetString(config, "privateNpmRc") ?? string.Empty);

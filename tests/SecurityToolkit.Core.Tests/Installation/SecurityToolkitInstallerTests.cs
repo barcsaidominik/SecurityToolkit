@@ -868,4 +868,154 @@ public class SecurityToolkitInstallerTests : IDisposable
         Assert.True(File.Exists(Path.Combine(_root, "azure-security-toolkit.yml")));
         Assert.Contains(outcome.Messages, m => m.Contains("azure-security-toolkit.yml már nem frissül", StringComparison.Ordinal));
     }
+
+    private static Dictionary<string, object?> ReleaseProfile(string version = "1.2.0", params string[] providers) => new()
+    {
+        ["pipelineProviders"] = (providers.Length == 0 ? new[] { "azure", "github" } : providers).Cast<object?>().ToList(),
+        ["toolkitRelease"] = new Dictionary<string, object?> { ["version"] = version },
+    };
+
+    private static InstallerDependencies ReleaseDependencies(FakeHttpMessageHandler handler)
+        => new(null, null, null, ToolkitReleaseResolver: new ToolkitReleaseResolver(new HttpClient(handler)));
+
+    [Fact]
+    public async Task InstallAsync_ToolkitReleaseUnset_LockAndPipelinesHaveNoDownloadStep()
+    {
+        var outcome = await new SecurityToolkitInstaller(Templates()).InstallAsync(
+            new InstallOptions(_root, NonInteractive: true, ConfigureOnly: true),
+            new Dictionary<string, object?> { ["pipelineProviders"] = new List<object?> { "azure", "github" } },
+            toolProvisioner: null);
+
+        Assert.Equal(0, outcome.ExitCode);
+        var lockJson = await File.ReadAllTextAsync(Path.Combine(_root, ".security", SecurityToolkitInstaller.LockFileName));
+        Assert.DoesNotContain("toolkitRelease", lockJson, StringComparison.Ordinal);
+        Assert.DoesNotContain("Install security-toolkit", File.ReadAllText(Path.Combine(_root, "azure-security-toolkit.yml")));
+        Assert.DoesNotContain("Install security-toolkit", ReadGitHubWorkflow());
+    }
+
+    [Fact]
+    public async Task InstallAsync_ToolkitReleaseFullInstall_PinsChecksumsAndWritesVerifiedDownloadSteps()
+    {
+        var handler = ToolkitReleaseResolverTests.Handler(System.Net.HttpStatusCode.OK, ToolkitReleaseResolverTests.ChecksumFile);
+
+        var outcome = await new SecurityToolkitInstaller(Templates()).InstallAsync(
+            new InstallOptions(_root, NonInteractive: true), ReleaseProfile(), toolProvisioner: null,
+            ReleaseDependencies(handler), targetSelector: null);
+
+        Assert.Equal(0, outcome.ExitCode);
+        Assert.Equal(
+            new Uri("https://github.com/barcsaidominik/SecurityToolkit/releases/download/v1.2.0/SHA256SUMS"),
+            Assert.Single(handler.RequestedUris));
+
+        var lockData = ScannerSupport.ParseJsonObject(
+            await File.ReadAllTextAsync(Path.Combine(_root, ".security", SecurityToolkitInstaller.LockFileName)));
+        var release = ScannerSupport.GetDictionary(lockData, "toolkitRelease")!;
+        Assert.Equal("1.2.0", ScannerSupport.GetString(release, "version"));
+        Assert.Equal(ToolkitReleaseResolverTests.WinHash, ScannerSupport.GetString(ScannerSupport.GetDictionary(release, "sha256")!, "win-x64"));
+
+        var azure = File.ReadAllText(Path.Combine(_root, "azure-security-toolkit.yml")).Replace("\r\n", "\n");
+        Assert.Contains("- bash: |\n    set -euo pipefail\n", azure);
+        Assert.Contains($"  x86_64) rid=linux-x64; sum={ToolkitReleaseResolverTests.LinuxHash} ;;", azure);
+        Assert.Contains($"  aarch64|arm64) rid=linux-arm64; sum={ToolkitReleaseResolverTests.ArmHash} ;;", azure);
+        Assert.Contains("    echo \"##vso[task.prependpath]$dir\"\n  displayName: Install security-toolkit 1.2.0 (Linux)\n" +
+                        "  condition: and(succeeded(), eq(variables['Agent.OS'], 'Linux'))\n", azure);
+        Assert.Contains(
+            "curl.exe -fsSL --retry 3 -o \"%dir%\\security-toolkit.exe\" " +
+            "\"https://github.com/barcsaidominik/SecurityToolkit/releases/download/v1.2.0/security-toolkit-win-x64.exe\" || exit /b 2",
+            azure);
+        Assert.Contains($"findstr /i /x \"{ToolkitReleaseResolverTests.WinHash}\"", azure);
+        Assert.True(
+            azure.IndexOf("Install security-toolkit 1.2.0 (Windows)", StringComparison.Ordinal)
+            < azure.IndexOf("Initialize pinned security tools", StringComparison.Ordinal));
+
+        var github = ReadGitHubWorkflow();
+        Assert.Contains("        if: runner.os == 'Linux'\n        shell: bash\n        run: |\n          set -euo pipefail\n", github);
+        Assert.Contains("          dir=\"${{ runner.temp }}/security-toolkit-bin\"\n", github);
+        Assert.Contains("          echo \"$dir\" >> \"$GITHUB_PATH\"\n", github);
+        Assert.Contains("        if: runner.os == 'Windows'\n        shell: cmd\n", github);
+        Assert.Contains("          >>\"%GITHUB_PATH%\" echo %dir%\n", github);
+    }
+
+    [Fact]
+    public async Task InstallAsync_ToolkitReleaseAlreadyPinned_KeepsHashesWithoutDownloading()
+    {
+        var first = ToolkitReleaseResolverTests.Handler(System.Net.HttpStatusCode.OK, ToolkitReleaseResolverTests.ChecksumFile);
+        var installer = new SecurityToolkitInstaller(Templates());
+        var options = new InstallOptions(_root, NonInteractive: true);
+        Assert.Equal(0, (await installer.InstallAsync(options, ReleaseProfile(), null, ReleaseDependencies(first), null)).ExitCode);
+
+        var second = ToolkitReleaseResolverTests.Handler(System.Net.HttpStatusCode.InternalServerError, string.Empty);
+        var outcome = await installer.InstallAsync(options, ReleaseProfile(), null, ReleaseDependencies(second), null);
+
+        Assert.Equal(0, outcome.ExitCode);
+        Assert.Empty(second.RequestedUris);
+        Assert.Contains(ToolkitReleaseResolverTests.LinuxHash, File.ReadAllText(Path.Combine(_root, "azure-security-toolkit.yml")));
+    }
+
+    [Fact]
+    public async Task InstallAsync_ToolkitReleaseConfigureOnly_WritesFailingStepAndExplains()
+    {
+        var handler = ToolkitReleaseResolverTests.Handler(System.Net.HttpStatusCode.OK, ToolkitReleaseResolverTests.ChecksumFile);
+
+        var outcome = await new SecurityToolkitInstaller(Templates()).InstallAsync(
+            new InstallOptions(_root, NonInteractive: true, ConfigureOnly: true), ReleaseProfile(), null, ReleaseDependencies(handler), null);
+
+        Assert.Equal(0, outcome.ExitCode);
+        Assert.Empty(handler.RequestedUris);
+        Assert.Contains(outcome.Messages, m => m.Contains("checksumjai még nincsenek rögzítve", StringComparison.Ordinal));
+        var azure = File.ReadAllText(Path.Combine(_root, "azure-security-toolkit.yml")).Replace("\r\n", "\n");
+        Assert.Contains("is not pinned in .security/security.lock.json: run a full install first.\n    exit 2\n", azure);
+        Assert.DoesNotContain("curl", azure);
+    }
+
+    [Fact]
+    public async Task InstallAsync_ToolkitReleaseChecksumsUnavailable_ReturnsExitCode2()
+    {
+        var handler = ToolkitReleaseResolverTests.Handler(System.Net.HttpStatusCode.NotFound, string.Empty);
+
+        var outcome = await new SecurityToolkitInstaller(Templates()).InstallAsync(
+            new InstallOptions(_root, NonInteractive: true), ReleaseProfile(), null, ReleaseDependencies(handler), null);
+
+        Assert.Equal(2, outcome.ExitCode);
+        Assert.Contains(outcome.Messages, m => m.Contains("404", StringComparison.Ordinal));
+    }
+
+    [Theory]
+    [InlineData("toolkitRelease.version", "v1.2.0", "toolkitRelease.version must be")]
+    [InlineData("toolkitRelease.version", "1.2.0\"; rm -rf /", "toolkitRelease.version must be")]
+    [InlineData("toolkitRelease.baseUrl", "http://example.test/releases", "toolkitRelease.baseUrl must be")]
+    [InlineData("toolkitRelease.baseUrl", "https://example.test/a b", "toolkitRelease.baseUrl must be")]
+    [InlineData("azureVmImage", "ubuntu latest", "azureVmImage must be")]
+    public async Task InstallAsync_InvalidReleaseOrImageSettings_ReturnExitCode2(string key, string value, string expectedMessage)
+    {
+        var profile = ReleaseProfile();
+        if (key.StartsWith("toolkitRelease.", StringComparison.Ordinal))
+        {
+            ((Dictionary<string, object?>)profile["toolkitRelease"]!)[key["toolkitRelease.".Length..]] = value;
+        }
+        else
+        {
+            profile[key] = value;
+        }
+
+        var outcome = await new SecurityToolkitInstaller(Templates()).InstallAsync(
+            new InstallOptions(_root, NonInteractive: true, DryRun: true), profile, toolProvisioner: null);
+
+        Assert.Equal(2, outcome.ExitCode);
+        Assert.Contains(outcome.Messages, m => m.Contains(expectedMessage, StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task InstallAsync_AzureVmImage_SelectsAHostedPoolInsteadOfThePoolName()
+    {
+        var outcome = await new SecurityToolkitInstaller(Templates()).InstallAsync(
+            new InstallOptions(_root, NonInteractive: true, ConfigureOnly: true),
+            new Dictionary<string, object?> { ["azureVmImage"] = "ubuntu-latest" },
+            toolProvisioner: null);
+
+        Assert.Equal(0, outcome.ExitCode);
+        var azure = File.ReadAllText(Path.Combine(_root, "azure-security-toolkit.yml")).Replace("\r\n", "\n");
+        Assert.Contains("pool:\n  vmImage: 'ubuntu-latest'\n", azure);
+        Assert.DoesNotContain("name: 'SecurityToolkit'", azure);
+    }
 }

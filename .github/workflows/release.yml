@@ -1,0 +1,70 @@
+# Builds the self-contained security-toolkit binaries for a version tag (v1.2.0, v1.3.0-rc.1)
+# and publishes them as a GitHub release, together with SHA256SUMS. Target projects pin those
+# checksums (toolkitRelease in security.config.json) and their generated pipelines verify the
+# download against them.
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+*'
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          global-json-file: global.json
+
+      - name: Check the tag
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="${GITHUB_REF_NAME#v}"
+          if ! [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$ ]]; then
+            echo "Not a release tag: $GITHUB_REF_NAME" >&2
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Test
+        run: dotnet test SecurityToolkit.slnx -c Release
+
+      - name: Publish binaries
+        shell: bash
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          for rid in win-x64 linux-x64 linux-arm64; do
+            dotnet publish src/SecurityToolkit.Cli/SecurityToolkit.Cli.csproj -c Release -r "$rid" \
+              -p:SelfContained=true -p:Version="$VERSION" -o "out/$rid"
+          done
+          cp out/win-x64/security-toolkit.exe dist/security-toolkit-win-x64.exe
+          cp out/linux-x64/security-toolkit dist/security-toolkit-linux-x64
+          cp out/linux-arm64/security-toolkit dist/security-toolkit-linux-arm64
+          (cd dist && sha256sum security-toolkit-* > SHA256SUMS && cat SHA256SUMS)
+
+      - name: Create the release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          prerelease=()
+          if [[ "$VERSION" == *-* ]]; then prerelease=(--prerelease); fi
+          gh release create "$GITHUB_REF_NAME" dist/* --repo "$GITHUB_REPOSITORY" \
+            --title "$GITHUB_REF_NAME" --generate-notes --verify-tag "${prerelease[@]}"

@@ -197,7 +197,8 @@ security-toolkit <parancs> --help
 | `installHook`, `installVSCodeExtensions` | git hook, VS Code extensionök |
 | `installPrerequisites`, `sdkChannel`, `nodeWingetId`, `nodeVersion` | hiányzó SDK/Node telepítése wingettel (csak Windowson; Linuxon csak jelzi a hiányt) |
 | `generatePipeline`, `pipelineProviders`, `pipelineHistory` | generáljon-e pipeline-t, és melyik platformra (`azure`, `github`) |
-| `agentPool`, `privateNuGet`, `privateNpmRc` | az Azure-pipeline beállításai ([4.2](04-pipeline.md#42-pipeline-változók-és-secretek)) |
+| `agentPool`, `azureVmImage`, `privateNuGet`, `privateNpmRc` | az Azure-pipeline beállításai ([4.2](04-pipeline.md#42-pipeline-változók-és-secretek), [4.7](04-pipeline.md#47-efemer-vagy-hosted-agent-a-cli-letöltése-release-ből)) |
+| `toolkitRelease.version`, `toolkitRelease.baseUrl` | a pipeline a megadott release-ből töltse le a CLI-t (efemer/hosted agent, [4.7](04-pipeline.md#47-efemer-vagy-hosted-agent-a-cli-letöltése-release-ből)); üres verzió = a gépi PATH-on lévő CLI |
 | `githubRunsOn`, `githubCodeScanning`, `githubSchedule` | a GitHub Actions workflow beállításai ([4.6](04-pipeline.md#46-github-actions-az-azure-helyett-vagy-mellett)) |
 
 Egy kulcs módosítása után: `install --project-root . --configure-only --non-interactive`. Ha egy
@@ -215,5 +216,24 @@ dotnet publish src/SecurityToolkit.Cli/SecurityToolkit.Cli.csproj -c Release -r 
 ```
 
 Éles használatra mindig az `install.bat`-ot (Linuxon az `install.sh`-t) használd: ez publikál, és a gépi PATH-ra telepít.
+
+### Kiadás (release)
+
+Efemer és hosted agentekhez a toolkit GitHub Release-ként is megjelenik
+([4.7](04-pipeline.md#47-efemer-vagy-hosted-agent-a-cli-letöltése-release-ből)). Kiadni egy verziótaggel lehet:
+
+```powershell
+git tag v1.2.0
+git push GitHub v1.2.0
+```
+
+A `.github/workflows/release.yml` erre lefuttatja a teszteket, megépíti a `win-x64`, `linux-x64` és
+`linux-arm64` self-contained binárist (`-p:Version=1.2.0`), és egy release-be teszi őket a
+`SHA256SUMS` fájllal együtt. A kötőjeles tag (pl. `v1.3.0-rc.1`) pre-release lesz. Egy kiadott verziót
+ne cserélj le: a célprojektek a checksumját rögzítették, és a pipeline-juk egy kicserélt fájlnál
+elbukik. Javításhoz adj ki új verziót.
+
+A forrásból buildelt CLI (`install.bat`/`install.sh`, `dotnet run`) verziója `0.0.0-dev`
+(`security-toolkit --version`).
 
 [Következő: 7. Hibaelhárítás →](07-hibaelharitas.md)

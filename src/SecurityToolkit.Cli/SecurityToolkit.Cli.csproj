@@ -8,6 +8,8 @@
     <RootNamespace>SecurityToolkit.Cli</RootNamespace>
     <AssemblyName>security-toolkit</AssemblyName>
     <InvariantGlobalization>true</InvariantGlobalization>
+    <!-- Local/source builds report this; the release workflow overrides it with -p:Version=<tag>. -->
+    <Version>0.0.0-dev</Version>
   </PropertyGroup>
 
   <!--

@@ -91,7 +91,8 @@ public static class InstallCommandFactory
             var dependencies = new InstallerDependencies(
                 new SemgrepRuleDownloader(new HttpClient()),
                 new VsCodeExtensionInstaller(processRunner),
-                new GitHookInstaller(processRunner));
+                new GitHookInstaller(processRunner),
+                ToolkitReleaseResolver: new ToolkitReleaseResolver(new HttpClient()));
 
             // --check and --dry-run never prompt, even without --non-interactive: InstallAsync would
             // otherwise ask for target selection and block on stdin (e.g. in CI or over ssh).

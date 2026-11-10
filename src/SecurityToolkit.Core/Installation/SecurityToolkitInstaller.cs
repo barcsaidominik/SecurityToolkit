@@ -33,7 +33,8 @@ public sealed record InstallerDependencies(
     SemgrepRuleDownloader? SemgrepRuleDownloader,
     VsCodeExtensionInstaller? VsCodeExtensionInstaller,
     GitHookInstaller? GitHookInstaller,
-    PrerequisiteProvisioner? PrerequisiteProvisioner = null);
+    PrerequisiteProvisioner? PrerequisiteProvisioner = null,
+    ToolkitReleaseResolver? ToolkitReleaseResolver = null);
 
 /// <summary>
 /// Project-independent local security toolkit installer. Generates/updates the target project's
@@ -72,6 +73,13 @@ public sealed class SecurityToolkitInstaller
 
     /// <summary>The committed, project-shared config file name.</summary>
     public const string ConfigFileName = "security.config.json";
+
+    /// <summary>
+    /// Where <c>toolkitRelease</c> downloads releases from by default: this toolkit's GitHub
+    /// releases (<c>&lt;baseUrl&gt;/v&lt;version&gt;/&lt;asset&gt;</c>). A mirror with the same layout
+    /// (e.g. an internal artifact server) can be configured instead.
+    /// </summary>
+    public const string DefaultToolkitReleaseBaseUrl = "https://github.com/barcsaidominik/SecurityToolkit/releases/download";
 
     /// <summary>
     /// The gitignored, per-machine override file name. Holds any user-set local overrides (e.g. a
@@ -202,11 +210,36 @@ public sealed class SecurityToolkitInstaller
             WireDotNetProjects(backup, root, scan, config);
 
             var lockData = BuildLock(config, securityDirectory);
+
+            // The release checksums must be pinned before the lock and the pipelines are written: the
+            // pipelines embed them. --configure-only/--check never download (the pipeline step then
+            // fails with a "not pinned" message until a full install runs).
+            if (TryGetDict(lockData, "toolkitRelease") is { } toolkitRelease
+                && TryGetDict(toolkitRelease, "sha256") is { Count: 0 } pinnedHashes
+                && !options.ConfigureOnly && !options.CheckOnly
+                && dependencies.ToolkitReleaseResolver is not null)
+            {
+                try
+                {
+                    var hashes = await dependencies.ToolkitReleaseResolver.ResolveAsync(
+                        GetString(toolkitRelease, "baseUrl")!, GetString(toolkitRelease, "version")!, cancellationToken).ConfigureAwait(false);
+                    foreach (var (rid, hash) in hashes)
+                    {
+                        pinnedHashes[rid] = hash;
+                    }
+                }
+                catch (InvalidOperationException ex)
+                {
+                    messages.Add(ex.Message);
+                    exitCode = 2;
+                }
+            }
+
             backup.SaveManagedText(Path.Combine(securityDirectory, LockFileName), ToolkitJson.Serialize(lockData), owned: true);
 
             if (GetBool(config, "generatePipeline"))
             {
-                WritePipelineFiles(backup, root, config, messages);
+                WritePipelineFiles(backup, root, config, lockData, messages);
             }
 
             if (options.CheckOnly)
@@ -431,12 +464,21 @@ public sealed class SecurityToolkitInstaller
             ["generatePipeline"] = true,
             ["pipelineHistory"] = true,
             ["agentPool"] = "SecurityToolkit",
+            ["azureVmImage"] = string.Empty,
             ["privateNuGet"] = false,
             ["privateNpmRc"] = string.Empty,
             ["pipelineProviders"] = new List<object?> { "azure" },
             ["githubRunsOn"] = new List<object?> { "self-hosted" },
             ["githubCodeScanning"] = false,
             ["githubSchedule"] = string.Empty,
+            // Empty version: the pipelines expect the CLI on the agent's PATH (install.bat/install.sh).
+            // Set: they download this release first (ephemeral/hosted agents), verified against the
+            // checksums pinned in the lock.
+            ["toolkitRelease"] = new Dictionary<string, object?>
+            {
+                ["version"] = string.Empty,
+                ["baseUrl"] = DefaultToolkitReleaseBaseUrl,
+            },
             ["sonar"] = new Dictionary<string, object?>
             {
                 ["url"] = "http://localhost:9000",
@@ -601,6 +643,13 @@ public sealed class SecurityToolkitInstaller
         ValidateSonarCoverage(sonar);
         ValidateDevSkim(GetDict(config, "devskim"));
         ValidatePipeline(config);
+        ValidateToolkitRelease(GetDict(config, "toolkitRelease"));
+
+        if (config.TryGetValue("azureVmImage", out var vmImage)
+            && (vmImage is not string image || !System.Text.RegularExpressions.Regex.IsMatch(image, "^[A-Za-z0-9._-]*$")))
+        {
+            throw new InvalidOperationException("azureVmImage must be empty or a hosted image name such as ubuntu-latest.");
+        }
 
         if (!GetBool(tools, "gitleaks"))
         {
@@ -616,6 +665,31 @@ public sealed class SecurityToolkitInstaller
         }
 
         _ = scan;
+    }
+
+    /// <summary>
+    /// toolkitRelease.version / baseUrl end up verbatim in the generated pipeline scripts (download
+    /// URL), so both are restricted to characters that are inert in bash, cmd and YAML.
+    /// </summary>
+    private static void ValidateToolkitRelease(IDictionary<string, object?> toolkitRelease)
+    {
+        if (toolkitRelease.TryGetValue("version", out var versionValue) && versionValue is not (null or string))
+        {
+            throw new InvalidOperationException("toolkitRelease.version must be a string.");
+        }
+
+        var version = GetString(toolkitRelease, "version") ?? string.Empty;
+        if (version.Length > 0
+            && !System.Text.RegularExpressions.Regex.IsMatch(version, @"^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$"))
+        {
+            throw new InvalidOperationException("toolkitRelease.version must be empty or a release version such as 1.2.0 (without the leading v).");
+        }
+
+        var baseUrl = GetString(toolkitRelease, "baseUrl") ?? string.Empty;
+        if (!System.Text.RegularExpressions.Regex.IsMatch(baseUrl, "^https://[A-Za-z0-9.-]+(:[0-9]+)?(/[A-Za-z0-9._~%+-]+)*/?$"))
+        {
+            throw new InvalidOperationException("toolkitRelease.baseUrl must be an https URL (letters, digits and . _ ~ % + - in the path).");
+        }
     }
 
     /// <summary>
@@ -999,11 +1073,41 @@ public sealed class SecurityToolkitInstaller
             };
         }
 
-        return new Dictionary<string, object?>
+        var lockData = new Dictionary<string, object?>
         {
             ["schemaVersion"] = 1L,
             ["tools"] = lockTools,
         };
+
+        // Only present when enabled, so a project that never uses it keeps a byte-identical lock.
+        var toolkitRelease = GetDict(config, "toolkitRelease");
+        var releaseVersion = GetString(toolkitRelease, "version") ?? string.Empty;
+        if (releaseVersion.Length > 0)
+        {
+            var baseUrl = (GetString(toolkitRelease, "baseUrl") ?? DefaultToolkitReleaseBaseUrl).TrimEnd('/');
+            var hashes = new Dictionary<string, object?>(StringComparer.Ordinal);
+            if (oldLock is not null
+                && TryGetDict(oldLock, "toolkitRelease") is { } oldRelease
+                && string.Equals(GetString(oldRelease, "version"), releaseVersion, StringComparison.Ordinal)
+                && string.Equals(GetString(oldRelease, "baseUrl"), baseUrl, StringComparison.Ordinal)
+                && TryGetDict(oldRelease, "sha256") is { } oldHashes
+                && ToolkitReleaseResolver.AssetNames.Keys.All(rid => GetString(oldHashes, rid) is { Length: 64 }))
+            {
+                foreach (var rid in ToolkitReleaseResolver.AssetNames.Keys)
+                {
+                    hashes[rid] = GetString(oldHashes, rid);
+                }
+            }
+
+            lockData["toolkitRelease"] = new Dictionary<string, object?>
+            {
+                ["version"] = releaseVersion,
+                ["baseUrl"] = baseUrl,
+                ["sha256"] = hashes,
+            };
+        }
+
+        return lockData;
     }
 
     /// <summary>Reads the committed lock, if it exists yet.</summary>
@@ -1042,13 +1146,21 @@ public sealed class SecurityToolkitInstaller
     private const string UploadSarifAction = "github/codeql-action/upload-sarif@1fc58d04a4d4374f921bdac573c3811c240f9c26 # v4.39.2";
 
     private static void WritePipelineFiles(
-        BackupService backup, string root, IDictionary<string, object?> config, List<string> messages)
+        BackupService backup, string root, IDictionary<string, object?> config,
+        IDictionary<string, object?> lockData, List<string> messages)
     {
         var providers = GetStringList(config, "pipelineProviders");
+        var release = ToolkitReleasePin.FromLock(lockData);
+        if (release is { IsPinned: false })
+        {
+            messages.Add(
+                $"toolkitRelease: a security-toolkit v{release.Version} checksumjai még nincsenek rögzítve; a generált pipeline " +
+                "telepítő lépése ezért hibával áll meg. Futtass egy teljes (--configure-only nélküli) installt.");
+        }
 
         if (providers.Contains("azure"))
         {
-            WriteAzurePipelineYaml(backup, root, config);
+            WriteAzurePipelineYaml(backup, root, config, release);
         }
         else if (File.Exists(Path.Combine(root, AzurePipelineFileName)))
         {
@@ -1057,7 +1169,7 @@ public sealed class SecurityToolkitInstaller
 
         if (providers.Contains("github"))
         {
-            WriteGitHubWorkflow(backup, root, config);
+            WriteGitHubWorkflow(backup, root, config, release);
 
             if (GetBool(config, "privateNuGet") || !string.IsNullOrEmpty(GetString(config, "privateNpmRc")))
             {
@@ -1124,7 +1236,86 @@ public sealed class SecurityToolkitInstaller
     /// self-hosted runner with the CLI on PATH (no shell is pinned: the steps are plain CLI calls,
     /// and a Windows runner without pwsh falls back to the built-in Windows PowerShell).
     /// </summary>
-    private static void WriteGitHubWorkflow(BackupService backup, string root, IDictionary<string, object?> config)
+    /// <summary>The lock's <c>toolkitRelease</c> pin; null when the pipelines use the CLI already on PATH.</summary>
+    private sealed record ToolkitReleasePin(string Version, string BaseUrl, IReadOnlyDictionary<string, string> Sha256)
+    {
+        public bool IsPinned => ToolkitReleaseResolver.AssetNames.Keys.All(Sha256.ContainsKey);
+
+        public string AssetUrl(string rid)
+            => ToolkitReleaseResolver.DownloadUrl(BaseUrl, Version, ToolkitReleaseResolver.AssetNames[rid]);
+
+        public static ToolkitReleasePin? FromLock(IDictionary<string, object?> lockData)
+        {
+            if (TryGetDict(lockData, "toolkitRelease") is not { } release)
+            {
+                return null;
+            }
+
+            var hashes = new Dictionary<string, string>(StringComparer.Ordinal);
+            if (TryGetDict(release, "sha256") is { } sha256)
+            {
+                foreach (var (rid, value) in sha256)
+                {
+                    if (value is string hash && System.Text.RegularExpressions.Regex.IsMatch(hash, "^[0-9a-f]{64}$"))
+                    {
+                        hashes[rid] = hash;
+                    }
+                }
+            }
+
+            return new ToolkitReleasePin(GetString(release, "version")!, GetString(release, "baseUrl")!, hashes);
+        }
+    }
+
+    /// <summary>
+    /// The pipeline step(s) that put the pinned release on PATH, before provision: one bash script
+    /// (Linux x64/arm64) and one cmd script (Windows x64), each selected by the agent OS, so neither
+    /// needs PowerShell. An unpinned release yields a single step that fails with an explanation.
+    /// </summary>
+    /// <param name="binDirectory">Download directory, as the CI platform's expression for its temp dir.</param>
+    /// <param name="bashPathCommand">bash line that prepends <c>$dir</c> to PATH for later steps.</param>
+    /// <param name="cmdPathCommand">cmd line that prepends <c>%dir%</c> to PATH for later steps.</param>
+    private static (IReadOnlyList<string> Bash, IReadOnlyList<string> Cmd)? BuildToolkitInstallScripts(
+        ToolkitReleasePin release, string binDirectory, string bashPathCommand, string cmdPathCommand)
+    {
+        if (!release.IsPinned)
+        {
+            return null;
+        }
+
+        var bash = new[]
+        {
+            "set -euo pipefail",
+            "case \"$(uname -m)\" in",
+            $"  x86_64) rid=linux-x64; sum={release.Sha256["linux-x64"]} ;;",
+            $"  aarch64|arm64) rid=linux-arm64; sum={release.Sha256["linux-arm64"]} ;;",
+            "  *) echo \"security-toolkit: unsupported architecture $(uname -m)\" >&2; exit 2 ;;",
+            "esac",
+            $"dir=\"{binDirectory}/security-toolkit-bin\"",
+            "mkdir -p \"$dir\"",
+            $"curl -fsSL --retry 3 -o \"$dir/security-toolkit\" \"{release.BaseUrl}/v{release.Version}/security-toolkit-$rid\"",
+            "echo \"$sum  $dir/security-toolkit\" | sha256sum -c --quiet -",
+            "chmod +x \"$dir/security-toolkit\"",
+            bashPathCommand,
+        };
+
+        var cmd = new[]
+        {
+            $"set \"dir={binDirectory}\\security-toolkit-bin\"",
+            "if not exist \"%dir%\" mkdir \"%dir%\" || exit /b 2",
+            $"curl.exe -fsSL --retry 3 -o \"%dir%\\security-toolkit.exe\" \"{release.AssetUrl("win-x64")}\" || exit /b 2",
+            $"certutil -hashfile \"%dir%\\security-toolkit.exe\" SHA256 | findstr /i /x \"{release.Sha256["win-x64"]}\" >nul || (echo security-toolkit: checksum mismatch & exit /b 2)",
+            cmdPathCommand,
+        };
+
+        return (bash, cmd);
+    }
+
+    private static string IndentBlock(IEnumerable<string> lines, int spaces)
+        => string.Concat(lines.Select(l => new string(' ', spaces) + l + "\n"));
+
+    private static void WriteGitHubWorkflow(
+        BackupService backup, string root, IDictionary<string, object?> config, ToolkitReleasePin? release)
     {
         const string workspace = "${{ github.workspace }}";
         // run_attempt: a re-run keeps run_id, and must not merge into (or collide with) the first attempt.
@@ -1158,8 +1349,38 @@ public sealed class SecurityToolkitInstaller
                 $"      - uses: {CheckoutAction}\n" +
                 "        with:\n" +
                 "          fetch-depth: 0\n" +
-                "          persist-credentials: false\n" +
-                "\n" +
+                "          persist-credentials: false\n";
+
+        if (release is not null)
+        {
+            var scripts = BuildToolkitInstallScripts(
+                release, "${{ runner.temp }}", "echo \"$dir\" >> \"$GITHUB_PATH\"", ">>\"%GITHUB_PATH%\" echo %dir%");
+            if (scripts is { } s)
+            {
+                yaml += "\n" +
+                        $"      - name: Install security-toolkit {release.Version} (Linux)\n" +
+                        "        if: runner.os == 'Linux'\n" +
+                        "        shell: bash\n" +
+                        "        run: |\n" +
+                        IndentBlock(s.Bash, 10) +
+                        "\n" +
+                        $"      - name: Install security-toolkit {release.Version} (Windows)\n" +
+                        "        if: runner.os == 'Windows'\n" +
+                        "        shell: cmd\n" +
+                        "        run: |\n" +
+                        IndentBlock(s.Cmd, 10);
+            }
+            else
+            {
+                yaml += "\n" +
+                        $"      - name: Install security-toolkit {release.Version}\n" +
+                        "        run: |\n" +
+                        $"          echo security-toolkit v{release.Version} is not pinned in .security/security.lock.json: run a full install first.\n" +
+                        "          exit 2\n";
+            }
+        }
+
+        yaml += "\n" +
                 "      - name: Initialize pinned security tools\n" +
                 $"        run: security-toolkit provision --project-root \"{workspace}\" --require-pinned\n";
 
@@ -1200,12 +1421,17 @@ public sealed class SecurityToolkitInstaller
         backup.SaveManagedText(Path.Combine(root, ".github", "workflows", "security-toolkit.yml"), yaml, owned: true);
     }
 
-    private static void WriteAzurePipelineYaml(BackupService backup, string root, IDictionary<string, object?> config)
+    private static void WriteAzurePipelineYaml(
+        BackupService backup, string root, IDictionary<string, object?> config, ToolkitReleasePin? release)
     {
-        var agentPool = YamlQuote(GetString(config, "agentPool") ?? string.Empty);
+        // A Microsoft-hosted agent is selected by image, a self-hosted (or scale-set) one by pool name.
+        var vmImage = GetString(config, "azureVmImage") ?? string.Empty;
+        var pool = vmImage.Length > 0
+            ? $"pool:\n  vmImage: {YamlQuote(vmImage)}\n"
+            : $"pool:\n  name: {YamlQuote(GetString(config, "agentPool") ?? string.Empty)}\n";
         var yaml = "trigger: none\n" +
                    "pr: none\n" +
-                   $"pool:\n  name: {agentPool}\n" +
+                   pool +
                    "variables:\n" +
                    "  securityRunId: $(Build.BuildId)\n" +
                    "steps:\n" +
@@ -1223,6 +1449,33 @@ public sealed class SecurityToolkitInstaller
         if (!string.IsNullOrEmpty(privateNpmRc))
         {
             yaml += $"\n- task: npmAuthenticate@0\n  inputs:\n    workingFile: {YamlQuote(privateNpmRc)}\n";
+        }
+
+        if (release is not null)
+        {
+            var scripts = BuildToolkitInstallScripts(
+                release, "$(Agent.TempDirectory)", "echo \"##vso[task.prependpath]$dir\"", "echo ##vso[task.prependpath]%dir%");
+            if (scripts is { } s)
+            {
+                yaml += "\n" +
+                        "- bash: |\n" +
+                        IndentBlock(s.Bash, 4) +
+                        $"  displayName: Install security-toolkit {release.Version} (Linux)\n" +
+                        "  condition: and(succeeded(), eq(variables['Agent.OS'], 'Linux'))\n" +
+                        "\n" +
+                        "- script: |\n" +
+                        IndentBlock(s.Cmd, 4) +
+                        $"  displayName: Install security-toolkit {release.Version} (Windows)\n" +
+                        "  condition: and(succeeded(), eq(variables['Agent.OS'], 'Windows_NT'))\n";
+            }
+            else
+            {
+                yaml += "\n" +
+                        "- script: |\n" +
+                        $"    echo security-toolkit v{release.Version} is not pinned in .security/security.lock.json: run a full install first.\n" +
+                        "    exit 2\n" +
+                        $"  displayName: Install security-toolkit {release.Version}\n";
+            }
         }
 
         yaml += "\n" +
