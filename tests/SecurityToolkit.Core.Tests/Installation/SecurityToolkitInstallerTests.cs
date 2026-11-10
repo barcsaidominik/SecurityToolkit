@@ -701,4 +701,171 @@ public class SecurityToolkitInstallerTests : IDisposable
         Assert.Contains(outcome.DriftEntries!, e => e.RelativePath == ".security/Toolkit.Common.ps1" && e.Status == DriftStatus.WouldDelete);
         Assert.True(File.Exists(Path.Combine(_root, ".security", "Toolkit.Common.ps1")));
     }
+
+    private static Dictionary<string, object?> GitHubProfile(params (string Key, object? Value)[] extras)
+    {
+        var profile = new Dictionary<string, object?> { ["pipelineProviders"] = new List<object?> { "github" } };
+        foreach (var (key, value) in extras)
+        {
+            profile[key] = value;
+        }
+
+        return profile;
+    }
+
+    private string ReadGitHubWorkflow()
+        => File.ReadAllText(Path.Combine(_root, ".github", "workflows", "security-toolkit.yml")).Replace("\r\n", "\n");
+
+    [Fact]
+    public async Task InstallAsync_DefaultConfig_GeneratesOnlyTheAzurePipeline()
+    {
+        var outcome = await new SecurityToolkitInstaller(Templates()).InstallAsync(
+            new InstallOptions(_root, NonInteractive: true, ConfigureOnly: true), configProfile: null, toolProvisioner: null);
+
+        Assert.Equal(0, outcome.ExitCode);
+        Assert.True(File.Exists(Path.Combine(_root, "azure-security-toolkit.yml")));
+        Assert.False(File.Exists(Path.Combine(_root, ".github", "workflows", "security-toolkit.yml")));
+        var config = ScannerSupport.ParseJsonObject(
+            await File.ReadAllTextAsync(Path.Combine(_root, ".security", SecurityToolkitInstaller.ConfigFileName)));
+        Assert.Equal(new object?[] { "azure" }, ScannerSupport.GetList(config, "pipelineProviders"));
+    }
+
+    [Fact]
+    public async Task InstallAsync_GitHubProvider_WritesPinnedWorkflowWithOneStepPerToolAndSharedRunId()
+    {
+        var outcome = await new SecurityToolkitInstaller(Templates()).InstallAsync(
+            new InstallOptions(_root, NonInteractive: true, ConfigureOnly: true), GitHubProfile(), toolProvisioner: null);
+
+        Assert.Equal(0, outcome.ExitCode);
+        Assert.False(File.Exists(Path.Combine(_root, "azure-security-toolkit.yml")));
+        var yaml = ReadGitHubWorkflow();
+
+        Assert.Contains("on:\n  workflow_dispatch:\npermissions:\n  contents: read\njobs:\n", yaml);
+        Assert.Contains("    runs-on: ['self-hosted']\n", yaml);
+        Assert.Contains(
+            "        run: security-toolkit provision --project-root \"${{ github.workspace }}\" --require-pinned\n", yaml);
+        Assert.Contains(
+            "      - name: 'Security scan: gitleaks'\n" +
+            "        if: ${{ !cancelled() }}\n" +
+            "        run: security-toolkit scan --project-root \"${{ github.workspace }}\" --tool gitleaks --mode Report " +
+            "--run-id ${{ github.run_id }}-${{ github.run_attempt }} --history\n",
+            yaml);
+        Assert.Contains("name: security-results\n          path: .security/results\n", yaml);
+
+        // Every action is pinned to a full commit SHA, never a movable tag.
+        var uses = yaml.Split('\n').Where(l => l.Contains("uses: ", StringComparison.Ordinal)).ToList();
+        Assert.Equal(2, uses.Count);
+        Assert.All(uses, l => Assert.Matches("@[0-9a-f]{40} # v[0-9]", l));
+
+        Assert.DoesNotContain("upload-sarif", yaml);
+        Assert.DoesNotContain("security-events", yaml);
+        Assert.DoesNotContain("schedule:", yaml);
+        Assert.DoesNotContain("SONAR_TOKEN", yaml);
+    }
+
+    [Fact]
+    public async Task InstallAsync_GitHubWithCodeScanningAndSchedule_AddsSarifUploadPermissionsAndCron()
+    {
+        var profile = GitHubProfile(
+            ("githubCodeScanning", true),
+            ("githubSchedule", "0 2 * * 1-5"),
+            ("githubRunsOn", new List<object?> { "self-hosted", "security-toolkit" }));
+
+        var outcome = await new SecurityToolkitInstaller(Templates()).InstallAsync(
+            new InstallOptions(_root, NonInteractive: true, ConfigureOnly: true), profile, toolProvisioner: null);
+
+        Assert.Equal(0, outcome.ExitCode);
+        var yaml = ReadGitHubWorkflow();
+        Assert.Contains("  schedule:\n    - cron: '0 2 * * 1-5'\n", yaml);
+        Assert.Contains("  contents: read\n  security-events: write\n  actions: read\n", yaml);
+        Assert.Contains("    runs-on: ['self-hosted', 'security-toolkit']\n", yaml);
+        Assert.Contains("github/codeql-action/upload-sarif@", yaml);
+        Assert.Contains("          sarif_file: .security/results/${{ github.run_id }}-${{ github.run_attempt }}\n", yaml);
+    }
+
+    [Fact]
+    public async Task InstallAsync_GitHubWithSonarCoverage_MapsSecretsIntoTheSonarStepEnv()
+    {
+        var profile = SonarCoverageProfile(new Dictionary<string, object?>
+        {
+            ["coverage"] = true,
+            ["testEnvironment"] = new Dictionary<string, object?> { ["ConnectionStrings__Default"] = "TEST_DB_CONNECTION" },
+        });
+        profile["pipelineProviders"] = new List<object?> { "azure", "github" };
+
+        var outcome = await new SecurityToolkitInstaller(Templates()).InstallAsync(
+            new InstallOptions(_root, NonInteractive: true, ConfigureOnly: true), profile, toolProvisioner: null);
+
+        Assert.Equal(0, outcome.ExitCode);
+        Assert.True(File.Exists(Path.Combine(_root, "azure-security-toolkit.yml")));
+        var yaml = ReadGitHubWorkflow();
+        Assert.Contains(
+            "--tool sonar --mode Report --run-id ${{ github.run_id }}-${{ github.run_attempt }} --include-sonar\n" +
+            "        env:\n" +
+            "          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}\n" +
+            "          ConnectionStrings__Default: ${{ secrets.TEST_DB_CONNECTION }}\n",
+            yaml);
+    }
+
+    [Theory]
+    [InlineData("pipelineProviders", "gitlab", "pipelineProviders entries must be one of")]
+    [InlineData("githubRunsOn", "self hosted", "githubRunsOn must be")]
+    [InlineData("githubSchedule", "0 2 * *", "githubSchedule must be")]
+    [InlineData("githubSchedule", "0 2 * * 1\n- run: x", "githubSchedule must be")]
+    public async Task InstallAsync_InvalidGitHubPipelineSettings_ReturnExitCode2(string key, string value, string expectedMessage)
+    {
+        var profile = GitHubProfile();
+        profile[key] = key == "githubSchedule" ? value : new List<object?> { value };
+
+        var outcome = await new SecurityToolkitInstaller(Templates()).InstallAsync(
+            new InstallOptions(_root, NonInteractive: true, DryRun: true), profile, toolProvisioner: null);
+
+        Assert.Equal(2, outcome.ExitCode);
+        Assert.Contains(outcome.Messages, m => m.Contains(expectedMessage, StringComparison.Ordinal));
+    }
+
+    [Theory]
+    [InlineData("Test.Db")]
+    [InlineData("GITHUB_TOKEN")]
+    public async Task InstallAsync_GitHubWithTestEnvironmentNotAValidSecretName_ReturnsExitCode2(string secretName)
+    {
+        var profile = SonarCoverageProfile(new Dictionary<string, object?>
+        {
+            ["coverage"] = true,
+            ["testEnvironment"] = new Dictionary<string, object?> { ["ConnectionStrings__Default"] = secretName },
+        });
+        profile["pipelineProviders"] = new List<object?> { "github" };
+
+        var outcome = await new SecurityToolkitInstaller(Templates()).InstallAsync(
+            new InstallOptions(_root, NonInteractive: true, DryRun: true), profile, toolProvisioner: null);
+
+        Assert.Equal(2, outcome.ExitCode);
+        Assert.Contains(outcome.Messages, m => m.Contains("must name a GitHub secret", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task InstallAsync_GeneratePipelineWithNoProvider_ReturnsExitCode2()
+    {
+        var profile = new Dictionary<string, object?> { ["pipelineProviders"] = new List<object?>() };
+
+        var outcome = await new SecurityToolkitInstaller(Templates()).InstallAsync(
+            new InstallOptions(_root, NonInteractive: true, DryRun: true), profile, toolProvisioner: null);
+
+        Assert.Equal(2, outcome.ExitCode);
+        Assert.Contains(outcome.Messages, m => m.Contains("at least one provider", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task InstallAsync_ProviderDropped_LeavesThePreviousPipelineFileAndSaysSo()
+    {
+        var installer = new SecurityToolkitInstaller(Templates());
+        var options = new InstallOptions(_root, NonInteractive: true, ConfigureOnly: true);
+        Assert.Equal(0, (await installer.InstallAsync(options, configProfile: null, toolProvisioner: null)).ExitCode);
+
+        var outcome = await installer.InstallAsync(options, GitHubProfile(), toolProvisioner: null);
+
+        Assert.Equal(0, outcome.ExitCode);
+        Assert.True(File.Exists(Path.Combine(_root, "azure-security-toolkit.yml")));
+        Assert.Contains(outcome.Messages, m => m.Contains("azure-security-toolkit.yml már nem frissül", StringComparison.Ordinal));
+    }
 }

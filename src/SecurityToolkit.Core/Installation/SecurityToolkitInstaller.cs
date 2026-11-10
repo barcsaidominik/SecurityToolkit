@@ -206,7 +206,7 @@ public sealed class SecurityToolkitInstaller
 
             if (GetBool(config, "generatePipeline"))
             {
-                WritePipelineYaml(backup, root, config);
+                WritePipelineFiles(backup, root, config, messages);
             }
 
             if (options.CheckOnly)
@@ -327,7 +327,18 @@ public sealed class SecurityToolkitInstaller
 
             if (GetBool(config, "generatePipeline"))
             {
-                messages.Add("Azure: pool/repo/feed jogosultságok és a generált YAML-hoz pipeline létrehozása szükséges; a telepítő nem csatlakozik Azure-hoz.");
+                var providers = GetStringList(config, "pipelineProviders");
+                if (providers.Contains("azure"))
+                {
+                    messages.Add("Azure: pool/repo/feed jogosultságok és a generált YAML-hoz pipeline létrehozása szükséges; a telepítő nem csatlakozik Azure-hoz.");
+                }
+
+                if (providers.Contains("github"))
+                {
+                    messages.Add(
+                        $"GitHub: a {GitHubWorkflowRelativePath} egy self-hosted runnert vár (githubRunsOn címkék), amin a security-toolkit a PATH-on van; " +
+                        "a SONAR_TOKEN-t (és a sonar.testEnvironment secretjeit) a repó Actions secretjei közé kell felvenni. A telepítő nem csatlakozik GitHubhoz.");
+                }
             }
         }
         catch (Exception ex)
@@ -422,6 +433,10 @@ public sealed class SecurityToolkitInstaller
             ["agentPool"] = "SecurityToolkit",
             ["privateNuGet"] = false,
             ["privateNpmRc"] = string.Empty,
+            ["pipelineProviders"] = new List<object?> { "azure" },
+            ["githubRunsOn"] = new List<object?> { "self-hosted" },
+            ["githubCodeScanning"] = false,
+            ["githubSchedule"] = string.Empty,
             ["sonar"] = new Dictionary<string, object?>
             {
                 ["url"] = "http://localhost:9000",
@@ -585,13 +600,14 @@ public sealed class SecurityToolkitInstaller
 
         ValidateSonarCoverage(sonar);
         ValidateDevSkim(GetDict(config, "devskim"));
+        ValidatePipeline(config);
 
         if (!GetBool(tools, "gitleaks"))
         {
             config["installHook"] = false;
         }
 
-        foreach (var key in new[] { "installPrerequisites", "downloadSemgrepRules", "installHook", "installVSCodeExtensions", "generatePipeline", "pipelineHistory", "privateNuGet" })
+        foreach (var key in new[] { "installPrerequisites", "downloadSemgrepRules", "installHook", "installVSCodeExtensions", "generatePipeline", "pipelineHistory", "privateNuGet", "githubCodeScanning" })
         {
             if (config[key] is not bool)
             {
@@ -600,6 +616,85 @@ public sealed class SecurityToolkitInstaller
         }
 
         _ = scan;
+    }
+
+    /// <summary>
+    /// pipelineProviders selects which CI definitions <c>generatePipeline</c> writes. The GitHub
+    /// keys are only checked when the GitHub workflow is actually generated; every value checked
+    /// here is written verbatim (quoted) into the workflow, hence the strict patterns.
+    /// </summary>
+    private static void ValidatePipeline(IDictionary<string, object?> config)
+    {
+        if (!config.TryGetValue("pipelineProviders", out var rawProviders)
+            || rawProviders is not IEnumerable<object?> providerValues
+            || providerValues.Any(p => p is not string))
+        {
+            throw new InvalidOperationException("pipelineProviders must be a JSON array of strings.");
+        }
+
+        var providers = GetStringList(config, "pipelineProviders");
+        if (providers.Any(p => !SupportedPipelineProviders.Contains(p, StringComparer.Ordinal)))
+        {
+            throw new InvalidOperationException(
+                $"pipelineProviders entries must be one of: {string.Join(", ", SupportedPipelineProviders)}.");
+        }
+
+        if (providers.Distinct(StringComparer.Ordinal).Count() != providers.Count)
+        {
+            throw new InvalidOperationException("pipelineProviders must not contain duplicates.");
+        }
+
+        if (!GetBool(config, "generatePipeline"))
+        {
+            return;
+        }
+
+        if (providers.Count == 0)
+        {
+            throw new InvalidOperationException("pipelineProviders must list at least one provider when generatePipeline is true.");
+        }
+
+        if (!providers.Contains("github"))
+        {
+            return;
+        }
+
+        if (!config.TryGetValue("githubRunsOn", out var rawLabels)
+            || rawLabels is not IEnumerable<object?> labelValues
+            || labelValues.Any(l => l is not string label || !System.Text.RegularExpressions.Regex.IsMatch(label, "^[A-Za-z0-9_.-]+$"))
+            || GetStringList(config, "githubRunsOn").Count == 0)
+        {
+            throw new InvalidOperationException(
+                "githubRunsOn must be a non-empty JSON array of runner labels (letters, digits, '_', '.' and '-').");
+        }
+
+        if (config.TryGetValue("githubSchedule", out var rawSchedule) && rawSchedule is not null)
+        {
+            if (rawSchedule is not string schedule
+                || (schedule.Length > 0
+                    && !System.Text.RegularExpressions.Regex.IsMatch(schedule, "^[0-9*/,-]+( [0-9*/,-]+){4}$")))
+            {
+                throw new InvalidOperationException(
+                    "githubSchedule must be empty or a five-field cron expression (digits, '*', '/', ',' and '-').");
+            }
+        }
+
+        // GitHub secret names are stricter than Azure variable names: no '.', and the GITHUB_
+        // prefix is reserved (such a secret cannot exist, so the mapping would silently be empty).
+        var sonar = GetDict(config, "sonar");
+        if (GetBool(sonar, "coverage") && TryGetDict(sonar, "testEnvironment") is { } testEnvironment)
+        {
+            foreach (var (name, variable) in testEnvironment)
+            {
+                if (variable is not string secretName
+                    || !System.Text.RegularExpressions.Regex.IsMatch(secretName, "^[A-Za-z_][A-Za-z0-9_]*$")
+                    || secretName.StartsWith("GITHUB_", StringComparison.OrdinalIgnoreCase))
+                {
+                    throw new InvalidOperationException(
+                        $"sonar.testEnvironment.{name} must name a GitHub secret (letters, digits and '_', not starting with GITHUB_).");
+                }
+            }
+        }
     }
 
     /// <summary>
@@ -933,7 +1028,179 @@ public sealed class SecurityToolkitInstaller
     private static readonly string[] PipelineToolOrder =
         { "analyzers", "nuget", "npm", "semgrep", "gitleaks", "osv", "devskim", "sonar" };
 
-    private static void WritePipelineYaml(BackupService backup, string root, IDictionary<string, object?> config)
+    private static readonly string[] SupportedPipelineProviders = { "azure", "github" };
+
+    private const string AzurePipelineFileName = "azure-security-toolkit.yml";
+
+    /// <summary>Repository-relative path of the generated GitHub Actions workflow (forward slashes).</summary>
+    public const string GitHubWorkflowRelativePath = ".github/workflows/security-toolkit.yml";
+
+    // Actions are pinned to a full commit SHA (a tag can be moved), the same reason the scanner
+    // images are digest-pinned; the trailing comment lets Dependabot/humans see the version.
+    private const string CheckoutAction = "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1";
+    private const string UploadArtifactAction = "actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2";
+    private const string UploadSarifAction = "github/codeql-action/upload-sarif@1fc58d04a4d4374f921bdac573c3811c240f9c26 # v4.39.2";
+
+    private static void WritePipelineFiles(
+        BackupService backup, string root, IDictionary<string, object?> config, List<string> messages)
+    {
+        var providers = GetStringList(config, "pipelineProviders");
+
+        if (providers.Contains("azure"))
+        {
+            WriteAzurePipelineYaml(backup, root, config);
+        }
+        else if (File.Exists(Path.Combine(root, AzurePipelineFileName)))
+        {
+            messages.Add($"A korábban generált {AzurePipelineFileName} már nem frissül (az azure nincs a pipelineProviders-ben). Ha nincs rá szükség, töröld kézzel.");
+        }
+
+        if (providers.Contains("github"))
+        {
+            WriteGitHubWorkflow(backup, root, config);
+
+            if (GetBool(config, "privateNuGet") || !string.IsNullOrEmpty(GetString(config, "privateNpmRc")))
+            {
+                messages.Add("GitHub: a privateNuGet/privateNpmRc csak az Azure pipeline-ba ír hitelesítő lépést; a GitHub workflow-ban a privát feed elérését a runneren kell megoldani.");
+            }
+        }
+        else if (File.Exists(Path.Combine(root, GitHubWorkflowRelativePath)))
+        {
+            messages.Add($"A korábban generált {GitHubWorkflowRelativePath} már nem frissül (a github nincs a pipelineProviders-ben). Ha nincs rá szükség, töröld kézzel.");
+        }
+    }
+
+    /// <summary>One scan step per enabled tool, in <see cref="PipelineToolOrder"/>, shared by every provider.</summary>
+    /// <param name="TrailingArguments">CLI arguments written after --run-id (keeps the historical Azure order).</param>
+    /// <param name="SecretEnvironment">Step env var name → pipeline variable/secret NAME.</param>
+    private sealed record PipelineScanStep(string Tool, string TrailingArguments, IReadOnlyList<KeyValuePair<string, string>> SecretEnvironment);
+
+    private static List<PipelineScanStep> BuildPipelineScanSteps(IDictionary<string, object?> config)
+    {
+        var tools = GetToolsDict(config);
+        var historyEnabled = GetBool(config, "pipelineHistory");
+        var steps = new List<PipelineScanStep>();
+
+        foreach (var tool in PipelineToolOrder)
+        {
+            if (!GetBool(tools, tool))
+            {
+                continue;
+            }
+
+            var arguments = string.Empty;
+            if (tool == "gitleaks" && historyEnabled)
+            {
+                arguments += " --history";
+            }
+
+            var environment = new List<KeyValuePair<string, string>>();
+            if (tool == "sonar")
+            {
+                arguments += " --include-sonar";
+                environment.Add(new("SONAR_TOKEN", "SONAR_TOKEN"));
+
+                // Secret pipeline variables never reach a step's environment implicitly; each one the
+                // coverage tests need must be mapped here (names validated in ValidateSonarCoverage).
+                var sonar = GetDict(config, "sonar");
+                if (GetBool(sonar, "coverage") && TryGetDict(sonar, "testEnvironment") is { } testEnvironment)
+                {
+                    foreach (var (name, variable) in testEnvironment.OrderBy(e => e.Key, StringComparer.Ordinal))
+                    {
+                        environment.Add(new(name, (string)variable!));
+                    }
+                }
+            }
+
+            steps.Add(new PipelineScanStep(tool, arguments, environment));
+        }
+
+        return steps;
+    }
+
+    /// <summary>
+    /// GitHub Actions counterpart of <see cref="WriteAzurePipelineYaml"/>: same provision step, one
+    /// scan step per tool sharing one --run-id, results uploaded as an artifact. Runs on a
+    /// self-hosted runner with the CLI on PATH (no shell is pinned: the steps are plain CLI calls,
+    /// and a Windows runner without pwsh falls back to the built-in Windows PowerShell).
+    /// </summary>
+    private static void WriteGitHubWorkflow(BackupService backup, string root, IDictionary<string, object?> config)
+    {
+        const string workspace = "${{ github.workspace }}";
+        // run_attempt: a re-run keeps run_id, and must not merge into (or collide with) the first attempt.
+        const string runId = "${{ github.run_id }}-${{ github.run_attempt }}";
+        const string notCancelled = "${{ !cancelled() }}";
+
+        var codeScanning = GetBool(config, "githubCodeScanning");
+        var schedule = GetString(config, "githubSchedule") ?? string.Empty;
+        var runsOn = string.Join(", ", GetStringList(config, "githubRunsOn").Select(YamlQuote));
+
+        var yaml = "name: Security Toolkit\n" +
+                   "on:\n" +
+                   "  workflow_dispatch:\n";
+        if (schedule.Length > 0)
+        {
+            yaml += $"  schedule:\n    - cron: {YamlQuote(schedule)}\n";
+        }
+
+        yaml += "permissions:\n" +
+                "  contents: read\n";
+        if (codeScanning)
+        {
+            yaml += "  security-events: write\n" +
+                    "  actions: read\n";
+        }
+
+        yaml += "jobs:\n" +
+                "  security:\n" +
+                $"    runs-on: [{runsOn}]\n" +
+                "    steps:\n" +
+                $"      - uses: {CheckoutAction}\n" +
+                "        with:\n" +
+                "          fetch-depth: 0\n" +
+                "          persist-credentials: false\n" +
+                "\n" +
+                "      - name: Initialize pinned security tools\n" +
+                $"        run: security-toolkit provision --project-root \"{workspace}\" --require-pinned\n";
+
+        foreach (var step in BuildPipelineScanSteps(config))
+        {
+            yaml += "\n" +
+                    $"      - name: 'Security scan: {step.Tool}'\n" +
+                    $"        if: {notCancelled}\n" +
+                    $"        run: security-toolkit scan --project-root \"{workspace}\" --tool {step.Tool} --mode Report --run-id {runId}{step.TrailingArguments}\n";
+            if (step.SecretEnvironment.Count > 0)
+            {
+                yaml += "        env:\n";
+                foreach (var (name, secret) in step.SecretEnvironment)
+                {
+                    yaml += $"          {name}: ${{{{ secrets.{secret} }}}}\n";
+                }
+            }
+        }
+
+        yaml += "\n" +
+                "      - name: Upload security results\n" +
+                $"        if: {notCancelled}\n" +
+                $"        uses: {UploadArtifactAction}\n" +
+                "        with:\n" +
+                "          name: security-results\n" +
+                "          path: .security/results\n";
+
+        if (codeScanning)
+        {
+            yaml += "\n" +
+                    "      - name: Upload SARIF reports to code scanning\n" +
+                    $"        if: {notCancelled}\n" +
+                    $"        uses: {UploadSarifAction}\n" +
+                    "        with:\n" +
+                    $"          sarif_file: .security/results/{runId}\n";
+        }
+
+        backup.SaveManagedText(Path.Combine(root, ".github", "workflows", "security-toolkit.yml"), yaml, owned: true);
+    }
+
+    private static void WriteAzurePipelineYaml(BackupService backup, string root, IDictionary<string, object?> config)
     {
         var agentPool = YamlQuote(GetString(config, "agentPool") ?? string.Empty);
         var yaml = "trigger: none\n" +
@@ -963,44 +1230,20 @@ public sealed class SecurityToolkitInstaller
                 "  displayName: Initialize pinned security tools\n";
 
         var tools = GetToolsDict(config);
-        var historyEnabled = GetBool(config, "pipelineHistory");
 
-        foreach (var tool in PipelineToolOrder)
+        foreach (var step in BuildPipelineScanSteps(config))
         {
-            if (!GetBool(tools, tool))
-            {
-                continue;
-            }
-
             // Quoted: an agent work directory containing spaces would otherwise split the path into
             // separate CLI arguments (the git hook quotes "$repo_root" the same way).
-            var arguments = $"--project-root \"$(Build.SourcesDirectory)\" --tool {tool} --mode Report --run-id $(securityRunId)";
-            if (tool == "gitleaks" && historyEnabled)
-            {
-                arguments += " --history";
-            }
-
             var envBlock = string.Empty;
-            if (tool == "sonar")
+            if (step.SecretEnvironment.Count > 0)
             {
-                arguments += " --include-sonar";
-                envBlock = "  env:\n    SONAR_TOKEN: $(SONAR_TOKEN)\n";
-
-                // Secret pipeline variables never reach a step's environment implicitly; each one the
-                // coverage tests need must be mapped here (names validated in ValidateSonarCoverage).
-                var sonar = GetDict(config, "sonar");
-                if (GetBool(sonar, "coverage") && TryGetDict(sonar, "testEnvironment") is { } testEnvironment)
-                {
-                    foreach (var (name, variable) in testEnvironment.OrderBy(e => e.Key, StringComparer.Ordinal))
-                    {
-                        envBlock += $"    {name}: $({variable})\n";
-                    }
-                }
+                envBlock = "  env:\n" + string.Concat(step.SecretEnvironment.Select(e => $"    {e.Key}: $({e.Value})\n"));
             }
 
             yaml += "\n" +
-                    $"- script: security-toolkit scan {arguments}\n" +
-                    $"  displayName: 'Security scan: {tool}'\n" +
+                    $"- script: security-toolkit scan --project-root \"$(Build.SourcesDirectory)\" --tool {step.Tool} --mode Report --run-id $(securityRunId){step.TrailingArguments}\n" +
+                    $"  displayName: 'Security scan: {step.Tool}'\n" +
                     "  condition: always()\n" +
                     envBlock;
         }
@@ -1045,7 +1288,7 @@ public sealed class SecurityToolkitInstaller
                 "    PathtoPublish: $(Build.ArtifactStagingDirectory)/CodeAnalysisLogs\n" +
                 "    ArtifactName: CodeAnalysisLogs\n";
 
-        backup.SaveManagedText(Path.Combine(root, "azure-security-toolkit.yml"), yaml, owned: true);
+        backup.SaveManagedText(Path.Combine(root, AzurePipelineFileName), yaml, owned: true);
     }
 
     private static string YamlQuote(string text)

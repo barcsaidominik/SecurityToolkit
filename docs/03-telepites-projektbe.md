@@ -100,7 +100,7 @@ Mind a 8 eszközre rákérdez ([leírásuk](06-helyi-futtatas-es-cli.md#62-a-8-s
 4. **Provisioning:** letölti a Docker-image-eket, a digesteket rögzíti a `security.lock.json`-ban,
    és telepíti/rögzíti a .NET-eszközöket (DevSkim, SonarScanner, dotnet-coverage) a `.security/bin/` alá.
 5. Telepíti a git hookot és a VS Code extensionöket (ha kérted).
-6. Legenerálja az `azure-security-toolkit.yml`-t.
+6. Legenerálja az `azure-security-toolkit.yml`-t (és/vagy GitHubon a `.github/workflows/security-toolkit.yml`-t, ld. `pipelineProviders`, [4.6](04-pipeline.md#46-github-actions-az-azure-helyett-vagy-mellett)).
 7. A hátralévő kézi teendőket kiírja a konzolra és a `.security/pending-actions.md`-be.
 
 Minden módosított fájlról mentés készül a `.security/backups/<időbélyeg>/` alá (ld. 3.7, `restore`).
@@ -120,7 +120,7 @@ Exit code 0 és „In sync” üzenet. Nézd át a `.security/pending-actions.md
 | `.security/SecurityToolkit.props`, `gitleaks.toml` | **igen** | toolkit által kezelt („owned”) fájlok, kézzel ne szerkeszd |
 | `.security/rules/` | **igen** | a rögzített Semgrep-szabályok |
 | `.security/security.config.local.json.example` | **igen** | minta a lokális felülíráshoz |
-| `azure-security-toolkit.yml` | **igen** | a pipeline; kézzel ne szerkeszd |
+| `azure-security-toolkit.yml`, `.github/workflows/security-toolkit.yml` | **igen** | a generált pipeline (amelyiket kérted); kézzel ne szerkeszd |
 | `.gitignore`, `.semgrepignore`, `Directory.Build.props`, `.editorconfig` | **igen** | a managed blokkok miatt módosultak |
 | `.security/security.config.local.json` | nem (gitignore) | gépspecifikus felülírás |
 | `.security/results/`, `bin/`, `backups/`, `npm-tools/`, `vendor/` | nem (gitignore) | futásidejű adat |
@@ -200,7 +200,7 @@ feltöltés között lefuttatja a teszteket, és a lefedettséget is feltölti. 
    ```powershell
    security-toolkit install --project-root . --non-interactive
    ```
-3. Commitold a `security.config.json`, `security.lock.json` és `azure-security-toolkit.yml` változását.
+3. Commitold a `security.config.json`, `security.lock.json` és a generált pipeline-fájl(ok) változását.
 
 Mit futtat:
 

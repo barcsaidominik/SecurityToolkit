@@ -196,7 +196,9 @@ security-toolkit <parancs> --help
 | `devskim.ignoreRuleIds` | letiltott DevSkim-szabályok, pl. `["DS162092", "DS172411", "DS176209"]` (localhost, setTimeout, TODO) |
 | `installHook`, `installVSCodeExtensions` | git hook, VS Code extensionök |
 | `installPrerequisites`, `sdkChannel`, `nodeWingetId`, `nodeVersion` | hiányzó SDK/Node telepítése wingettel (csak Windowson; Linuxon csak jelzi a hiányt) |
-| `generatePipeline`, `agentPool`, `pipelineHistory`, `privateNuGet`, `privateNpmRc` | a generált pipeline beállításai |
+| `generatePipeline`, `pipelineProviders`, `pipelineHistory` | generáljon-e pipeline-t, és melyik platformra (`azure`, `github`) |
+| `agentPool`, `privateNuGet`, `privateNpmRc` | az Azure-pipeline beállításai ([4.2](04-pipeline.md#42-pipeline-változók-és-secretek)) |
+| `githubRunsOn`, `githubCodeScanning`, `githubSchedule` | a GitHub Actions workflow beállításai ([4.6](04-pipeline.md#46-github-actions-az-azure-helyett-vagy-mellett)) |
 
 Egy kulcs módosítása után: `install --project-root . --configure-only --non-interactive`. Ha egy
 eszközt vagy a coverage-et kapcsolod be, teljes `install` kell.

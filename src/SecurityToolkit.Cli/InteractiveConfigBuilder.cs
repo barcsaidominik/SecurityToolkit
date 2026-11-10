@@ -152,18 +152,53 @@ public static class InteractiveConfigBuilder
             "Választott eszközök VS Code extensionjeinek telepítése?", ScannerSupport.GetBool(config, "installVSCodeExtensions"));
 
         Console.WriteLine();
-        Console.WriteLine("--- Azure pipeline ---");
+        Console.WriteLine("--- CI pipeline (Azure DevOps / GitHub Actions) ---");
         config["generatePipeline"] = prompts.ReadYesNo(
-            "Külön manuális Azure security YAML előállítása?", ScannerSupport.GetBool(config, "generatePipeline"));
+            "Külön manuális security pipeline előállítása?", ScannerSupport.GetBool(config, "generatePipeline"));
 
         if (ScannerSupport.GetBool(config, "generatePipeline"))
         {
-            config["agentPool"] = prompts.ReadValue("Azure self-hosted agent pool neve", ScannerSupport.GetString(config, "agentPool") ?? "SecurityToolkit");
+            var existingProviders = ScannerSupport.GetList(config, "pipelineProviders").OfType<string>().ToList();
+            var providers = new List<object?>();
+            if (prompts.ReadYesNo("Azure DevOps pipeline (azure-security-toolkit.yml)?", existingProviders.Contains("azure")))
+            {
+                providers.Add("azure");
+            }
+
+            if (prompts.ReadYesNo("GitHub Actions workflow (.github/workflows/security-toolkit.yml)?", existingProviders.Contains("github")))
+            {
+                providers.Add("github");
+            }
+
+            config["pipelineProviders"] = providers;
+
             config["pipelineHistory"] = prompts.ReadYesNo(
                 "Gitleaks a teljes elérhető git history-t vizsgálja (-History)? (nem=csak working tree)", ScannerSupport.GetBool(config, "pipelineHistory"));
-            config["privateNuGet"] = prompts.ReadYesNo("NuGetAuthenticate task kell privát feedhez?", ScannerSupport.GetBool(config, "privateNuGet"));
-            config["privateNpmRc"] = prompts.ReadValue(
-                "Privát npm .npmrc relatív útvonala, üres=nem kell task", ScannerSupport.GetString(config, "privateNpmRc") ?? string.Empty);
+
+            if (providers.Contains("azure"))
+            {
+                config["agentPool"] = prompts.ReadValue("Azure self-hosted agent pool neve", ScannerSupport.GetString(config, "agentPool") ?? "SecurityToolkit");
+                config["privateNuGet"] = prompts.ReadYesNo("NuGetAuthenticate task kell privát feedhez?", ScannerSupport.GetBool(config, "privateNuGet"));
+                config["privateNpmRc"] = prompts.ReadValue(
+                    "Privát npm .npmrc relatív útvonala, üres=nem kell task", ScannerSupport.GetString(config, "privateNpmRc") ?? string.Empty);
+            }
+
+            if (providers.Contains("github"))
+            {
+                var labels = prompts.ReadValue(
+                    "GitHub runner címkék vesszővel (runs-on)",
+                    string.Join(",", ScannerSupport.GetList(config, "githubRunsOn").OfType<string>()));
+                config["githubRunsOn"] = labels
+                    .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                    .Cast<object?>()
+                    .ToList();
+                config["githubCodeScanning"] = prompts.ReadYesNo(
+                    "SARIF feltöltése a GitHub Code Scanningbe? (privát repóban Advanced Security kell)",
+                    ScannerSupport.GetBool(config, "githubCodeScanning"));
+                config["githubSchedule"] = prompts.ReadValue(
+                    "Ütemezés cron-kifejezéssel (UTC), üres=csak kézi indítás",
+                    ScannerSupport.GetString(config, "githubSchedule") ?? string.Empty);
+            }
         }
 
         // Non-selected modules must not accidentally install hooks.

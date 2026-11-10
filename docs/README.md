@@ -69,7 +69,7 @@ DevSkim és SonarQube (coverage-dzsel). Részletesen: [06 – Helyi futtatás é
 3. Fejlesztői gép (Dockerrel): `install.bat --no-infra` (Linuxon `sudo bash install.sh --no-infra`), majd a repóban
    `security-toolkit install --project-root .` → a generált fájlok commitolása. ([3. fejezet](03-telepites-projektbe.md))
 4. Azure DevOps: pipeline a `azure-security-toolkit.yml`-ből, `SONAR_TOKEN` és a többi secret
-   felvétele, első futtatás, a pool-hozzáférés engedélyezése. ([4. fejezet](04-pipeline.md))
+   felvétele, első futtatás, a pool-hozzáférés engedélyezése. GitHubon ugyanez Actions workflow-val. ([4. fejezet](04-pipeline.md))
 5. Eredmények: `security-results` artifact (`summary.md`), Scans fül, Sonar UI. ([5. fejezet](05-kiertekeles.md))
 
 ## Jelölések

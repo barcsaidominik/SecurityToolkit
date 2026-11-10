@@ -3,7 +3,8 @@
 [← 3. Telepítés projektbe](03-telepites-projektbe.md) · [Tartalomjegyzék](README.md) · [Következő: 5. Kiértékelés →](05-kiertekeles.md)
 
 A telepítő a repó gyökerébe generálja az `azure-security-toolkit.yml`-t. Ebből egy Azure DevOps
-pipeline-t kell létrehozni, a secreteket megadni, és elindítani. Ez repónként egyszer kell.
+pipeline-t kell létrehozni, a secreteket megadni, és elindítani. Ez repónként egyszer kell. GitHubon
+lévő repóhoz ugyanez GitHub Actions workflow-ként is kérhető, ld. [4.6](#46-github-actions-az-azure-helyett-vagy-mellett).
 
 ## 4.0 Egyszeri szervezeti beállítás: SARIF Scans fül
 
@@ -119,5 +120,83 @@ nem kell nyúlni.
 - [ ] Első futás: a pool-hozzáférés engedélyezve, minden lépés lefutott
 - [ ] `security-results` artifact és Scans fül, a Sonarban látszik az elemzés
 - [ ] Ütemezés beállítva (ha kell)
+
+## 4.6 GitHub Actions (az Azure helyett vagy mellett)
+
+Ha a repó GitHubon van, a telepítő Azure-pipeline helyett (vagy mellé) egy GitHub Actions workflow-t
+is tud generálni: `.github/workflows/security-toolkit.yml`. Ezt a `security.config.json`
+`pipelineProviders` listája dönti el:
+
+| `pipelineProviders` | Mi jön létre |
+|---|---|
+| `["azure"]` (alapérték) | csak az `azure-security-toolkit.yml`, ugyanaz, mint eddig |
+| `["github"]` | csak a GitHub workflow |
+| `["azure", "github"]` | mindkettő |
+
+Ha egy platformot kiveszel a listából, a korábban generált fájlja megmarad, csak nem frissül többé. A
+telepítő ezt üzenetben jelzi, a törlés a te döntésed.
+
+A workflow felépítése ugyanaz, mint az Azure-é: `provision --require-pinned`, utána minden bekapcsolt
+eszköz külön lépés, közös `--run-id`-val (`<run_id>-<run_attempt>`, így egy újrafuttatás nem keveredik az
+előzővel), a végén a `.security/results` → **`security-results`** artifact. A lépések
+`if: ${{ !cancelled() }}` feltétellel futnak: egy eszköz hibája nem állítja meg a többit, de a kézi
+leállítást tiszteletben tartják. A pipeline itt is mindig **Report** módban fut.
+
+### Runner
+
+A workflow **self-hosted runnert** vár, amin a `security-toolkit` a gépi PATH-on van (ugyanaz a gép és
+ugyanaz az `install.bat` / `install.sh`, mint az Azure agentnél, ld. [1. fejezet](01-gep-es-agent.md)).
+GitHub-hosted runneren nincs ott a CLI, ott a workflow első lépése elbukik.
+
+1. Repó → *Settings* → *Actions* → *Runners* → **New self-hosted runner**, és kövesd a GitHub
+   telepítési lépéseit. A runnert szolgáltatásként telepítsd (Windowson a `config.cmd` kérdésére,
+   Linuxon `./svc.sh install`).
+2. A runner szolgáltatásfiókjának látnia kell a Dockert (Linuxon a `docker` csoport tagja legyen).
+3. Az `install.bat` / `install.sh` után **indítsd újra a runner-szolgáltatást**, különben a régi PATH-szal
+   fut tovább.
+
+A `runs-on` címkéit a `githubRunsOn` adja meg (alapból `["self-hosted"]`). Ha több self-hosted runnered
+is van, adj a security-gépnek saját címkét, pl. `["self-hosted", "security-toolkit"]`.
+
+Shellt a workflow nem ír elő, mert a lépések egyszerű CLI-hívások. Linuxon bash fut, Windowson a pwsh,
+ha nincs telepítve, akkor a beépített Windows PowerShell. Külön telepíteni tehát semmit nem kell.
+
+### Secretek
+
+Repó → *Settings* → *Secrets and variables* → *Actions* → **New repository secret**:
+
+| Név | Mikor kell |
+|---|---|
+| `SONAR_TOKEN` | ha a Sonar be van kapcsolva (a projekt analysis tokenje, mint az Azure-nál) |
+| a `sonar.testEnvironment` minden *értéke* | ha coverage-import van, és a teszteknek kell |
+
+A GitHub secretek nevében nem lehet pont, és nem kezdődhetnek `GITHUB_`-bal. Ha a GitHub workflow is
+generálódik, a telepítő a `testEnvironment` értékeit e szerint ellenőrzi. Közös névnek (mindkét
+platformra) tehát pont nélküli nevet válassz, pl. `TEST_DB_CONNECTION`.
+
+A privát NuGet/npm feed hitelesítése (`privateNuGet`, `privateNpmRc`) csak az Azure-pipeline-ba ír
+lépést. GitHubon a feed elérését a runner gépén kell beállítani (pl. a felhasználói `nuget.config`-ban).
+
+### Code Scanning és ütemezés
+
+- `githubCodeScanning: true`: a futás végén a SARIF-riportok (Semgrep, Gitleaks, DevSkim) a repó
+  **Security → Code scanning** oldalára is felkerülnek. Privát repóban ehhez **GitHub Advanced Security**
+  (Code Security) licenc kell, nélküle ez a lépés elbukik. Ezért alapból ki van kapcsolva. A SARIF-fájlok
+  a `security-results` artifactban enélkül is benne vannak.
+- `githubSchedule`: ötmezős cron-kifejezés **UTC-ben**, pl. `"0 2 * * 1-5"` (hétköznap 02:00 UTC). Üresen
+  a workflow csak kézzel indul (*Actions* → *Security Toolkit* → **Run workflow**). GitHubon nincs
+  UI-ban beállítható ütemezés, mint az Azure-nál, ezért van erre külön kulcs.
+
+A workflow-ban minden action teljes commit-SHA-ra van rögzítve (nem tagre), ugyanazért, amiért a
+scanner-image-ek digestre. Az action-verziókat a toolkit frissítése hozza. Ha a repóban be van
+kapcsolva a Dependabot `github-actions` frissítése, és az ezt a fájlt is átírja, a telepítő ezt kézi
+módosításnak látja: a következő `install` kihagyja a fájlt, és szól róla
+([3.7](03-telepites-projektbe.md#37-karbantartás-és-frissítés)). Ezért ennél a fájlnál a Dependabot
+PR-jait ne olvaszd be: zárd le őket, vagy a `dependabot.yml`-ben hagyd ki a `github-actions` ökoszisztémát.
+
+**Ellenőrzés:**
+- az *Actions* fülön megjelent a **Security Toolkit** workflow, és kézzel elindítva minden lépés lefut;
+- a futás *Summary* oldalán ott a **`security-results`** artifact;
+- ha be van kapcsolva: a *Security → Code scanning* oldalon megjelentek a találatok.
 
 [Következő: 5. Kiértékelés →](05-kiertekeles.md)

@@ -34,6 +34,20 @@ public class InteractiveConfigBuilderTests : IDisposable
         Assert.False(result.ContainsKey("startSonarServer"));
         Assert.False(ScannerSupport.GetBool(result, "installHook"));
         Assert.Equal("repository", ScannerSupport.GetString(result, "semgrepScope"));
+        Assert.Equal(new object?[] { "azure" }, ScannerSupport.GetList(result, "pipelineProviders"));
+    }
+
+    [Fact]
+    public void Build_ExistingGitHubProvider_IsKeptWithItsRunnerLabels()
+    {
+        var (scan, config) = SecurityToolkitInstaller.ResolveConfig(_root, configProfile: null, SemgrepInstallScope.Unspecified);
+        config["pipelineProviders"] = new List<object?> { "github" };
+        config["githubRunsOn"] = new List<object?> { "self-hosted", "linux" };
+
+        var result = InteractiveConfigBuilder.Build(new NonInteractivePrompts(), scan, config);
+
+        Assert.Equal(new object?[] { "github" }, ScannerSupport.GetList(result, "pipelineProviders"));
+        Assert.Equal(new object?[] { "self-hosted", "linux" }, ScannerSupport.GetList(result, "githubRunsOn"));
     }
 
     [Fact]
