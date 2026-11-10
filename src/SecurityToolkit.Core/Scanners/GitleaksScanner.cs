@@ -79,6 +79,7 @@ public sealed class GitleaksScanner : IScanner
                 throw new FileNotFoundException($"Missing report: {reportPath}", reportPath);
             }
 
+            var fingerprints = Fingerprints(reportPath);
             var redacted = RedactReport(reportPath);
             ToolkitJson.WriteFile(reportPath, redacted);
 
@@ -87,12 +88,47 @@ public sealed class GitleaksScanner : IScanner
 
             // --staged (the pre-commit hook) blocks in every mode: the hook runs without --mode.
             var blocking = (context.Mode == ScanMode.Gate || context.Staged) && redacted.Count > 0;
-            return new[] { new ScanResult("gitleaks", scanMode, ScanStatus.Completed, redacted.Count, blocking) };
+            return new[] { new ScanResult("gitleaks", scanMode, ScanStatus.Completed, redacted.Count, blocking, Fingerprints: fingerprints) };
         }
         catch (Exception ex)
         {
             return new[] { new ScanResult("gitleaks", "repository", ScanStatus.Failed, null, Blocking: false, ex.Message) };
         }
+    }
+
+    /// <summary>
+    /// One baseline fingerprint per hit: rule + file + commit (empty outside --history) + Gitleaks'
+    /// own Match, which --redact=100 has already stripped of the secret value (e.g.
+    /// <c>"ApiKey": "REDACTED"</c>), so the fingerprint is computed without the raw secret ever
+    /// being on disk. The trade-off: a different secret written to exactly the same key in the
+    /// same file counts as the known finding.
+    /// </summary>
+    private static List<string> Fingerprints(string path)
+    {
+        var fingerprints = new List<string>();
+        if (System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(path)) is not System.Text.Json.Nodes.JsonArray array)
+        {
+            return fingerprints;
+        }
+
+        foreach (var item in array)
+        {
+            if (item is not System.Text.Json.Nodes.JsonObject hit)
+            {
+                continue;
+            }
+
+            var file = (hit["File"]?.ToString() ?? string.Empty).Replace('\\', '/');
+            if (file.StartsWith("./", StringComparison.Ordinal))
+            {
+                file = file[2..];
+            }
+
+            fingerprints.Add(FindingBaseline.Fingerprint(
+                "gitleaks", hit["RuleID"]?.ToString(), file, hit["Commit"]?.ToString(), hit["Match"]?.ToString()?.Trim()));
+        }
+
+        return fingerprints;
     }
 
     /// <summary>

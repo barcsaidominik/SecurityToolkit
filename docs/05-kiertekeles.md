@@ -116,9 +116,9 @@ jelenik meg:
 | Találat esetén | exit 0, a lépés zöld | **exit 1** blokkoló találatnál |
 | Technikai hiba | exit 2 | exit 2 |
 | Sonar | csak feltölt | megvárja a Quality Gate-et; ha bukik, a lépés is elbukik |
-| Hol használd | CI-pipeline (a generált pipeline mindig ezt használja), rendszeres riport | helyi ellenőrzés kiadás előtt, egyedi pipeline-ok |
+| Hol használd | CI-pipeline (a generált pipeline alapból ezt használja), rendszeres riport | helyi ellenőrzés kiadás előtt, a generált pipeline `pipelineMode: "Gate"` mellett, egyedi pipeline-ok |
 
-**Mi blokkol Gate módban** (abszolút küszöb, nem csak az új kódra):
+**Mi blokkol Gate módban** (baseline nélkül abszolút küszöb, ld. lent):
 
 | Eszköz | Blokkol, ha |
 |---|---|
@@ -130,6 +130,43 @@ jelenik meg:
 | sonar | bukó Quality Gate (a lépés elbukik) |
 
 A **`--staged`** (a pre-commit hook) módtól függetlenül mindig blokkol, ha titkot talál.
+
+### Baseline: csak az új találat blokkoljon
+
+Egy régebbi projektben a Gate mód addig piros, amíg a meglévő adósság el nem fogy. Hogy már most
+bekapcsolható legyen, a meglévő blokkoló találatokat elfogadottként rögzítheted a
+**`.security/baseline.json`**-ban. Ha ez a fájl létezik, a Gate mód (és a pre-commit hook) **csak a
+baseline-ban nem szereplő** találatra blokkol. A riport ettől még minden találatot listáz, és a
+`Message` oszlopban jelzi, mennyi volt ismert és mennyi új.
+
+```powershell
+security-toolkit scan --project-root . --update-baseline --history
+```
+
+- Report módban fut, és a futott eszközök **mostani blokkoló találatait** írja a baseline-ba,
+  eszközönként felülírva. A `--tool`-lal egyetlen eszközé frissíthető, a többié marad.
+- Egy eszköz, amelyik a futás során elbukott, és nem tudta listázni a találatait, nem frissül, a korábbi
+  bejegyzése marad.
+- **Ugyanazokkal a kapcsolókkal készítsd, mint ahogy a Gate fut.** A pipeline a Gitleaks-et
+  `--history`-val futtatja (`pipelineHistory`), ezért a baseline-t is így kell felvenni. Enélkül a
+  history-ban talált titkok mind újnak számítanak.
+- **Commitold** a `baseline.json`-t: így a csapat és a pipeline ugyanazt látja, és egy új elfogadás egy
+  review-zható diff. A fájl csak hash-eket tartalmaz, se titkot, se forráskódot.
+- Csak tudatosan frissítsd. Ha egy új találatot elfogadsz, előbb a [5.5](#55-triázs-és-téves-riasztások)
+  szerint döntsd el, hogy nem kell-e inkább javítani vagy szűken elnyomni.
+
+Mi számít ugyanannak a találatnak (az ujjlenyomat):
+
+| Eszköz | Ujjlenyomat | Következmény |
+|---|---|---|
+| semgrep | szabály + fájl + az érintett kódsorok (a szóközök nélkül) | a kód áthelyezése a fájlon belül nem tesz újjá egy ismert találatot; a sor módosítása igen |
+| gitleaks | szabály + fájl + commit (csak `--history`-nál) + a Gitleaks redaktált egyezése (pl. `"ApiKey": "REDACTED"`) | a titok értéke nincs benne, ezért ha **ugyanarra a kulcsra** ugyanabban a fájlban egy másik titok kerül, az ismertnek számít |
+| nuget | target + csomag + advisory | egy verziófrissítés, ami ugyanattól az advisorytól még érintett, ismert marad; egy új advisory új |
+| npm | target + csomag + advisory | mint a NuGetnél |
+
+A baseline nélküli projekt viselkedése nem változik. Az analyzers, az osv és a devskim továbbra sem
+blokkol. A Sonar a saját Quality Gate-jét használja, ami a *Sonar way* profilban amúgy is az új kódot
+nézi. A hibás vagy olvashatatlan `baseline.json` technikai hiba (exit 2), nem blokkolás.
 
 ## 5.5 Triázs és téves riasztások
 

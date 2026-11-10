@@ -10,10 +10,16 @@ namespace SecurityToolkit.Core.Scanners;
 /// <param name="Findings">Finding count, or null when unknown/not applicable.</param>
 /// <param name="Blocking">Whether this result should block Gate mode.</param>
 /// <param name="Message">Optional human-readable context.</param>
+/// <param name="Fingerprints">
+/// One <see cref="FindingBaseline"/> fingerprint per finding that makes this result blocking (the
+/// gate-relevant ones only), or null when the scanner does not support a baseline or could not list
+/// its findings. Never written to status.json.
+/// </param>
 public sealed record ScanResult(
     string Tool,
     string Target,
     ScanStatus Status,
     int? Findings,
     bool Blocking,
-    string Message = "");
+    string Message = "",
+    IReadOnlyList<string>? Fingerprints = null);

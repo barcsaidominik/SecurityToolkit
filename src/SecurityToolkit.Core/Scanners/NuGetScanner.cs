@@ -82,6 +82,7 @@ public sealed class NuGetScanner : IScanner
 
                 var count = 0;
                 var high = 0;
+                var fingerprints = new List<string>();
                 foreach (var projectObj in ScannerSupport.GetList(data, "projects"))
                 {
                     if (projectObj is not IDictionary<string, object?> project || !project.ContainsKey("frameworks"))
@@ -122,6 +123,11 @@ public sealed class NuGetScanner : IScanner
                                     if (severity is "High" or "Critical")
                                     {
                                         high++;
+                                        // Package + advisory, not the version: an upgrade that is still
+                                        // affected by the same advisory stays a known finding.
+                                        fingerprints.Add(FindingBaseline.Fingerprint(
+                                            "nuget", target, ScannerSupport.GetString(package, "id"),
+                                            ScannerSupport.GetString(vulnerability, "advisoryurl")));
                                     }
                                 }
                             }
@@ -130,7 +136,7 @@ public sealed class NuGetScanner : IScanner
                 }
 
                 var blocking = context.Mode == ScanMode.Gate && high > 0;
-                results.Add(new ScanResult("nuget", target, ScanStatus.Completed, count, blocking));
+                results.Add(new ScanResult("nuget", target, ScanStatus.Completed, count, blocking, Fingerprints: fingerprints));
             }
             catch (Exception ex)
             {

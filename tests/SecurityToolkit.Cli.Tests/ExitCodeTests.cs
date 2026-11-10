@@ -26,6 +26,24 @@ public class ExitCodeTests : IDisposable
         Assert.Equal(2, await parseResult.InvokeAsync());
     }
 
+    [Theory]
+    [InlineData("--staged")]
+    [InlineData("--secrets-only")]
+    public async Task Scan_UpdateBaselineWithStaged_ExitsTwo(string flag)
+    {
+        var parseResult = CliApp.BuildRootCommand().Parse(new[] { "scan", "--project-root", _root, "--update-baseline", flag });
+
+        Assert.Equal(2, await parseResult.InvokeAsync());
+    }
+
+    [Fact]
+    public async Task Scan_UpdateBaselineInGateMode_ExitsTwo()
+    {
+        var parseResult = CliApp.BuildRootCommand().Parse(new[] { "scan", "--project-root", _root, "--update-baseline", "--mode", "Gate" });
+
+        Assert.Equal(2, await parseResult.InvokeAsync());
+    }
+
     [Fact]
     public async Task Install_DryRun_ExitsZero()
     {

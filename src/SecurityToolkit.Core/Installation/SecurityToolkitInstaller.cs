@@ -463,6 +463,9 @@ public sealed class SecurityToolkitInstaller
             ["installVSCodeExtensions"] = false,
             ["generatePipeline"] = true,
             ["pipelineHistory"] = true,
+            // Gate: a step turns red (exit 1) on a blocking finding beyond .security/baseline.json; the
+            // other steps still run (condition: always()/!cancelled()).
+            ["pipelineMode"] = "Report",
             ["agentPool"] = "SecurityToolkit",
             ["azureVmImage"] = string.Empty,
             ["privateNuGet"] = false,
@@ -644,6 +647,11 @@ public sealed class SecurityToolkitInstaller
         ValidateDevSkim(GetDict(config, "devskim"));
         ValidatePipeline(config);
         ValidateToolkitRelease(GetDict(config, "toolkitRelease"));
+
+        if (GetString(config, "pipelineMode") is not ("Report" or "Gate"))
+        {
+            throw new InvalidOperationException("pipelineMode must be Report or Gate.");
+        }
 
         if (config.TryGetValue("azureVmImage", out var vmImage)
             && (vmImage is not string image || !System.Text.RegularExpressions.Regex.IsMatch(image, "^[A-Za-z0-9._-]*$")))
@@ -1185,12 +1193,13 @@ public sealed class SecurityToolkitInstaller
     /// <summary>One scan step per enabled tool, in <see cref="PipelineToolOrder"/>, shared by every provider.</summary>
     /// <param name="TrailingArguments">CLI arguments written after --run-id (keeps the historical Azure order).</param>
     /// <param name="SecretEnvironment">Step env var name → pipeline variable/secret NAME.</param>
-    private sealed record PipelineScanStep(string Tool, string TrailingArguments, IReadOnlyList<KeyValuePair<string, string>> SecretEnvironment);
+    private sealed record PipelineScanStep(string Tool, string Mode, string TrailingArguments, IReadOnlyList<KeyValuePair<string, string>> SecretEnvironment);
 
     private static List<PipelineScanStep> BuildPipelineScanSteps(IDictionary<string, object?> config)
     {
         var tools = GetToolsDict(config);
         var historyEnabled = GetBool(config, "pipelineHistory");
+        var mode = GetString(config, "pipelineMode") ?? "Report";
         var steps = new List<PipelineScanStep>();
 
         foreach (var tool in PipelineToolOrder)
@@ -1224,7 +1233,7 @@ public sealed class SecurityToolkitInstaller
                 }
             }
 
-            steps.Add(new PipelineScanStep(tool, arguments, environment));
+            steps.Add(new PipelineScanStep(tool, mode, arguments, environment));
         }
 
         return steps;
@@ -1389,7 +1398,7 @@ public sealed class SecurityToolkitInstaller
             yaml += "\n" +
                     $"      - name: 'Security scan: {step.Tool}'\n" +
                     $"        if: {notCancelled}\n" +
-                    $"        run: security-toolkit scan --project-root \"{workspace}\" --tool {step.Tool} --mode Report --run-id {runId}{step.TrailingArguments}\n";
+                    $"        run: security-toolkit scan --project-root \"{workspace}\" --tool {step.Tool} --mode {step.Mode} --run-id {runId}{step.TrailingArguments}\n";
             if (step.SecretEnvironment.Count > 0)
             {
                 yaml += "        env:\n";
@@ -1495,7 +1504,7 @@ public sealed class SecurityToolkitInstaller
             }
 
             yaml += "\n" +
-                    $"- script: security-toolkit scan --project-root \"$(Build.SourcesDirectory)\" --tool {step.Tool} --mode Report --run-id $(securityRunId){step.TrailingArguments}\n" +
+                    $"- script: security-toolkit scan --project-root \"$(Build.SourcesDirectory)\" --tool {step.Tool} --mode {step.Mode} --run-id $(securityRunId){step.TrailingArguments}\n" +
                     $"  displayName: 'Security scan: {step.Tool}'\n" +
                     "  condition: always()\n" +
                     envBlock;

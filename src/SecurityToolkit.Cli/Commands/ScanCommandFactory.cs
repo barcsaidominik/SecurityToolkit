@@ -19,7 +19,7 @@ public static class ScanCommandFactory
         };
         var modeOption = new Option<string>("--mode")
         {
-            Description = "Report (default; never blocks on findings) or Gate (absolute blocking thresholds).",
+            Description = "Report (default; never blocks on findings) or Gate (blocking thresholds; with .security/baseline.json only findings not in the baseline block).",
             DefaultValueFactory = _ => "Report",
         };
         modeOption.AcceptOnlyFromAmong("Report", "Gate");
@@ -68,15 +68,32 @@ public static class ScanCommandFactory
                 "share one results directory and merge into a single status.json.",
         };
 
+        var updateBaselineOption = new Option<bool>("--update-baseline")
+        {
+            Description = "Run in Report mode and record the current blocking findings of the scanners that ran " +
+                "as accepted in .security/baseline.json (per tool; combine with --tool to update one).",
+        };
+
         var command = new Command("scan", "Run the configured security scanners.")
         {
             projectRootOption, modeOption, historyOption, stagedOption, secretsOnlyOption,
             includeSonarOption, sonarOnlyOption, configFileOption, semgrepScopeOption,
-            toolOption, runIdOption,
+            toolOption, runIdOption, updateBaselineOption,
         };
 
         command.SetAction(async (parseResult, cancellationToken) =>
         {
+            // Checked before anything is read: a baseline update always runs in Report mode, and the
+            // staged hook must never rewrite what the team accepted.
+            var updateBaseline = parseResult.GetValue(updateBaselineOption);
+            if (updateBaseline
+                && (parseResult.GetValue(stagedOption) || parseResult.GetValue(secretsOnlyOption)
+                    || string.Equals(parseResult.GetValue(modeOption), "Gate", StringComparison.OrdinalIgnoreCase)))
+            {
+                Console.Error.WriteLine("--update-baseline cannot be combined with --staged/--secrets-only or --mode Gate.");
+                return 2;
+            }
+
             var root = Path.GetFullPath(parseResult.GetValue(projectRootOption)!);
             var securityDirectory = Path.Combine(root, ".security");
             var configPath = parseResult.GetValue(configFileOption)
@@ -95,6 +112,7 @@ public static class ScanCommandFactory
             var semgrepScope = (scopeOverride ?? configuredScope) == "frontend" ? SemgrepScope.Frontend : SemgrepScope.Repository;
 
             var staged = parseResult.GetValue(stagedOption) || parseResult.GetValue(secretsOnlyOption);
+
             var history = parseResult.GetValue(historyOption);
             var includeSonar = parseResult.GetValue(includeSonarOption) || parseResult.GetValue(sonarOnlyOption);
 
@@ -114,7 +132,8 @@ public static class ScanCommandFactory
                 History: history,
                 Staged: staged,
                 IncludeSonar: includeSonar,
-                SonarToken: Environment.GetEnvironmentVariable("SONAR_TOKEN"));
+                SonarToken: Environment.GetEnvironmentVariable("SONAR_TOKEN"),
+                UpdateBaseline: updateBaseline);
 
             var processRunner = new ProcessRunner();
             var dockerMountArguments = DockerRunArguments.Build(root);
@@ -146,6 +165,11 @@ public static class ScanCommandFactory
             {
                 Console.WriteLine($"{result.Tool} [{result.Target}]: {result.Status} findings={result.Findings?.ToString() ?? "n/a"} blocking={result.Blocking}"
                     + (string.IsNullOrEmpty(result.Message) ? string.Empty : $" - {result.Message}"));
+            }
+
+            foreach (var note in outcome.Notes ?? Array.Empty<string>())
+            {
+                Console.WriteLine(note);
             }
 
             Console.WriteLine($"Riportok: {outcome.StatusFilePath}");

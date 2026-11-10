@@ -174,6 +174,11 @@ public static class InteractiveConfigBuilder
 
             config["pipelineHistory"] = prompts.ReadYesNo(
                 "Gitleaks a teljes elérhető git history-t vizsgálja (-History)? (nem=csak working tree)", ScannerSupport.GetBool(config, "pipelineHistory"));
+            config["pipelineMode"] = prompts.ReadYesNo(
+                "A pipeline Gate módban fusson (blokkoló találatra piros lépés; .security/baseline.json mellett csak az új találatra)?",
+                ScannerSupport.GetString(config, "pipelineMode") == "Gate")
+                ? "Gate"
+                : "Report";
 
             if (ScannerSupport.GetDictionary(config, "toolkitRelease") is { } toolkitRelease)
             {

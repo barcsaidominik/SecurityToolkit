@@ -31,4 +31,5 @@ public sealed record ScanContext(
     bool History,
     bool Staged,
     bool IncludeSonar,
-    string? SonarToken);
+    string? SonarToken,
+    bool UpdateBaseline = false);

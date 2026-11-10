@@ -46,7 +46,8 @@ $env:ConnectionStrings__Default = Read-Host 'Teszt connection string'
 | Kapcsoló | Jelentés |
 |---|---|
 | `--project-root <útvonal>` | **kötelező**. A repó gyökere (ahol a `.security/` van). |
-| `--mode Report\|Gate` | `Report` (alapértelmezés): találat miatt nem bukik. `Gate`: blokkoló küszöbök ([5.4](05-kiertekeles.md#54-report-vagy-gate-mód)). |
+| `--mode Report\|Gate` | `Report` (alapértelmezés): találat miatt nem bukik. `Gate`: blokkoló küszöbök; `.security/baseline.json` mellett csak az új találat blokkol ([5.4](05-kiertekeles.md#54-report-vagy-gate-mód)). |
+| `--update-baseline` | Report módban fut, és a futott eszközök mostani blokkoló találatait elfogadottként a `.security/baseline.json`-ba írja ([5.4](05-kiertekeles.md#baseline-csak-az-új-találat-blokkoljon)). `--staged`-del és `--mode Gate`-tel nem kombinálható. |
 | `--tool <név>` | csak a megadott eszköz: `analyzers`, `nuget`, `npm`, `semgrep`, `gitleaks`, `osv`, `devskim`, `sonar` |
 | `--include-sonar` | a Sonar-feltöltés engedélyezése; nélküle a Sonar `not-run` |
 | `--sonar-only` | csak a Sonar (= `--tool sonar --include-sonar`) |
@@ -197,6 +198,7 @@ security-toolkit <parancs> --help
 | `installHook`, `installVSCodeExtensions` | git hook, VS Code extensionök |
 | `installPrerequisites`, `sdkChannel`, `nodeWingetId`, `nodeVersion` | hiányzó SDK/Node telepítése wingettel (csak Windowson; Linuxon csak jelzi a hiányt) |
 | `generatePipeline`, `pipelineProviders`, `pipelineHistory` | generáljon-e pipeline-t, és melyik platformra (`azure`, `github`) |
+| `pipelineMode` | `Report` (alapértelmezés) vagy `Gate`: ebben a módban futnak a generált pipeline scan-lépései ([5.4](05-kiertekeles.md#54-report-vagy-gate-mód)) |
 | `agentPool`, `azureVmImage`, `privateNuGet`, `privateNpmRc` | az Azure-pipeline beállításai ([4.2](04-pipeline.md#42-pipeline-változók-és-secretek), [4.7](04-pipeline.md#47-efemer-vagy-hosted-agent-a-cli-letöltése-release-ből)) |
 | `toolkitRelease.version`, `toolkitRelease.baseUrl` | a pipeline a megadott release-ből töltse le a CLI-t (efemer/hosted agent, [4.7](04-pipeline.md#47-efemer-vagy-hosted-agent-a-cli-letöltése-release-ből)); üres verzió = a gépi PATH-on lévő CLI |
 | `githubRunsOn`, `githubCodeScanning`, `githubSchedule` | a GitHub Actions workflow beállításai ([4.6](04-pipeline.md#46-github-actions-az-azure-helyett-vagy-mellett)) |

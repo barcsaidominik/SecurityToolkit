@@ -81,6 +81,7 @@ public sealed class SemgrepScanner : IScanner
                 ScannerSupport.GetDictionary(h, "extra") is { } extra &&
                 ScannerSupport.GetString(extra, "severity") == "ERROR");
             var scanErrors = ScannerSupport.GetList(data, "errors");
+            var fingerprints = ErrorFingerprints(context.Root, hits);
 
             if (scanErrors.Count > 0 || runResult.ExitCode == 3)
             {
@@ -109,7 +110,8 @@ public sealed class SemgrepScanner : IScanner
                     new ScanResult(
                         "semgrep", scopeLabel, ScanStatus.Failed, hits.Count, blocking,
                         $"Incomplete analysis: {scanErrors.Count} errors in {paths.Length} files; {hits.Count} findings preserved. " +
-                        "Review semgrep.json and semgrep-coverage.json. Parser errors do not prove invalid application code."),
+                        "Review semgrep.json and semgrep-coverage.json. Parser errors do not prove invalid application code.",
+                        fingerprints),
                 };
             }
 
@@ -119,12 +121,65 @@ public sealed class SemgrepScanner : IScanner
             {
                 new ScanResult(
                     "semgrep", completedScopeLabel, ScanStatus.Completed, hits.Count, completedBlocking,
-                    "ERROR is rule severity; not a universal High/Critical risk label."),
+                    "ERROR is rule severity; not a universal High/Critical risk label.",
+                    fingerprints),
             };
         }
         catch (Exception ex)
         {
             return new[] { new ScanResult("semgrep", "repository", ScanStatus.Failed, null, Blocking: false, ex.Message) };
+        }
+    }
+
+    /// <summary>
+    /// One baseline fingerprint per ERROR-severity hit: rule + path + the matched source lines with
+    /// surrounding whitespace trimmed, read from the working tree (Semgrep CE's own extra.lines and
+    /// extra.fingerprint are "requires login" placeholders). Line numbers are deliberately left out,
+    /// so code moving within the file keeps a known hit known.
+    /// </summary>
+    private static List<string> ErrorFingerprints(string root, IReadOnlyList<object?> hits)
+    {
+        var fingerprints = new List<string>();
+        var fileCache = new Dictionary<string, string[]?>(StringComparer.Ordinal);
+
+        foreach (var hit in hits)
+        {
+            if (hit is not IDictionary<string, object?> h
+                || ScannerSupport.GetDictionary(h, "extra") is not { } extra
+                || ScannerSupport.GetString(extra, "severity") != "ERROR")
+            {
+                continue;
+            }
+
+            var path = (ScannerSupport.GetString(h, "path") ?? string.Empty).Replace('\\', '/');
+            var startLine = ScannerSupport.GetDictionary(h, "start") is { } start ? ScannerSupport.GetInt(start, "line") : 0;
+            var endLine = ScannerSupport.GetDictionary(h, "end") is { } end ? ScannerSupport.GetInt(end, "line") : startLine;
+
+            if (!fileCache.TryGetValue(path, out var lines))
+            {
+                lines = ReadLines(root, path);
+                fileCache[path] = lines;
+            }
+
+            var code = lines is not null && startLine >= 1 && endLine >= startLine && endLine <= lines.Length
+                ? string.Join('\n', lines[(startLine - 1)..endLine].Select(l => l.Trim()))
+                : string.Empty;
+
+            fingerprints.Add(FindingBaseline.Fingerprint("semgrep", ScannerSupport.GetString(h, "check_id"), path, code));
+        }
+
+        return fingerprints;
+    }
+
+    private static string[]? ReadLines(string root, string relativePath)
+    {
+        try
+        {
+            return relativePath.Length == 0 ? null : File.ReadAllLines(ToolkitPaths.GetToolkitPath(root, relativePath));
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException or ArgumentException)
+        {
+            return null;
         }
     }
 }

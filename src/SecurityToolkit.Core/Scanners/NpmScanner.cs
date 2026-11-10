@@ -71,7 +71,17 @@ public sealed class NpmScanner : IScanner
                 var critical = ScannerSupport.GetInt(vulnerabilities, "critical");
 
                 var blocking = context.Mode == ScanMode.Gate && (high + critical) > 0;
-                results.Add(new ScanResult("npm", target, ScanStatus.Completed, total, blocking));
+                List<string>? fingerprints = AdvisoryFingerprints(target, data);
+
+                // The counts come from metadata, the fingerprints from the per-package entries; if
+                // those disagree (unexpected report shape), keep the absolute gate rather than let
+                // an empty fingerprint list wave the findings through.
+                if ((high + critical) > 0 && fingerprints.Count == 0)
+                {
+                    fingerprints = null;
+                }
+
+                results.Add(new ScanResult("npm", target, ScanStatus.Completed, total, blocking, Fingerprints: fingerprints));
             }
             catch (Exception ex)
             {
@@ -80,5 +90,40 @@ public sealed class NpmScanner : IScanner
         }
 
         return results;
+    }
+
+    /// <summary>
+    /// One fingerprint per high/critical advisory (npm audit v2 report: <c>vulnerabilities.&lt;pkg&gt;.via[]</c>
+    /// objects; string entries only point at another vulnerable package, which has its own entry).
+    /// Package + advisory URL, not the version, like the NuGet scanner.
+    /// </summary>
+    private static List<string> AdvisoryFingerprints(string target, IDictionary<string, object?> data)
+    {
+        var fingerprints = new List<string>();
+        if (ScannerSupport.GetDictionary(data, "vulnerabilities") is not { } packages)
+        {
+            return fingerprints;
+        }
+
+        foreach (var (name, value) in packages.OrderBy(p => p.Key, StringComparer.Ordinal))
+        {
+            if (value is not IDictionary<string, object?> package)
+            {
+                continue;
+            }
+
+            foreach (var via in ScannerSupport.GetList(package, "via"))
+            {
+                if (via is IDictionary<string, object?> advisory
+                    && ScannerSupport.GetString(advisory, "severity") is "high" or "critical")
+                {
+                    fingerprints.Add(FindingBaseline.Fingerprint(
+                        "npm", target, ScannerSupport.GetString(advisory, "name") ?? name,
+                        ScannerSupport.GetString(advisory, "url") ?? ScannerSupport.GetString(advisory, "source")));
+                }
+            }
+        }
+
+        return fingerprints;
     }
 }

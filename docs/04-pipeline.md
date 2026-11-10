@@ -94,8 +94,10 @@ megadott `.npmrc`-re.
   | `1` | Gate módban blokkoló találat | piros |
   | `2` | technikai hiba (az eszköz nem tudott lefutni) | piros |
 
-- A generált pipeline **mindig Report módban** fut: találat miatt nem lesz piros, csak technikai hiba
-  miatt. A Gate mód a helyi és az egyedi használatra való ([5.4](05-kiertekeles.md#54-report-vagy-gate-mód)).
+- A generált pipeline alapból **Report módban** fut: találat miatt nem lesz piros, csak technikai hiba
+  miatt. `"pipelineMode": "Gate"` mellett minden scan-lépés Gate módban fut, és blokkoló találatnál
+  piros lesz (exit 1). A többi lépés ettől még lefut. Egy régebbi projektnél előbb vegyél fel egy
+  baseline-t, hogy csak az új találat buktassa a futást ([5.4](05-kiertekeles.md#54-report-vagy-gate-mód)).
 
 **Ellenőrzés:**
 - minden lépés lefutott, és a `Security scan: …` lépések zöldek;
@@ -140,7 +142,7 @@ A workflow felépítése ugyanaz, mint az Azure-é: `provision --require-pinned`
 eszköz külön lépés, közös `--run-id`-val (`<run_id>-<run_attempt>`, így egy újrafuttatás nem keveredik az
 előzővel), a végén a `.security/results` → **`security-results`** artifact. A lépések
 `if: ${{ !cancelled() }}` feltétellel futnak: egy eszköz hibája nem állítja meg a többit, de a kézi
-leállítást tiszteletben tartják. A pipeline itt is mindig **Report** módban fut.
+leállítást tiszteletben tartják. A mód itt is a `pipelineMode`-on múlik (alapból **Report**).
 
 ### Runner
 

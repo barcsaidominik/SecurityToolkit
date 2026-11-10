@@ -381,9 +381,10 @@ A triage.md DÖNTÉS oszlopa kitöltve. Kezdd ezekkel: <G02, G05>. Csoportonkén
 
 ## 8.11 Ismert korlátok
 
-- A **Gate mód abszolút küszöb** ([5.4](05-kiertekeles.md#54-report-vagy-gate-mód)): egy javító
-  PR pipeline-ja addig piros maradhat Gate módban, amíg a régi adósság el nem fogy. A generált
-  pipeline Report módban fut, így ez ott nem akadály.
+- A **Gate mód baseline nélkül abszolút küszöb** ([5.4](05-kiertekeles.md#54-report-vagy-gate-mód)):
+  egy javító PR pipeline-ja addig piros maradhat Gate módban, amíg a régi adósság el nem fogy. Ezt a
+  `.security/baseline.json` oldja meg: a meglévő találatok elfogadottak, és csak az új blokkol. A
+  generált pipeline alapból Report módban fut.
 - A **Sonar-ellenőrzés lassú** helyben (teljes build + elemzés), ezért a Sonar-szabályok javítását
   gyakran csak a PR pipeline-ja igazolja.
 - **Tranzitív függőségek:** a javítás sokszor egy közvetlen függőség frissítése vagy explicit

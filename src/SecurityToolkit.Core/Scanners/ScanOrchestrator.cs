@@ -52,6 +52,9 @@ public sealed class ScanOrchestrator
             results.AddRange(scannerResults);
         }
 
+        var notes = new List<string>();
+        results = ApplyBaseline(context, results, notes);
+
         SanitizeTokens(context, new[] { context.SonarToken });
 
         var commit = await TryGetCommitAsync(context, cancellationToken).ConfigureAwait(false);
@@ -100,7 +103,56 @@ public sealed class ScanOrchestrator
             exitCode = 0;
         }
 
-        return new ScanOutcome(exitCode, mergedResults, statusPath);
+        return new ScanOutcome(exitCode, mergedResults, statusPath, notes);
+    }
+
+    /// <summary>
+    /// --update-baseline: records this run's fingerprints as accepted (nothing blocks). Otherwise,
+    /// when .security/baseline.json exists, a result stays blocking only if it has a finding the
+    /// baseline does not cover. Results without fingerprints (scanner cannot list its findings, or
+    /// the tool has no baseline support) keep the absolute gate. An unreadable baseline is a
+    /// technical failure (exit 2), never an exception: an unhandled exception would surface as exit 1.
+    /// </summary>
+    private static List<ScanResult> ApplyBaseline(ScanContext context, List<ScanResult> results, List<string> notes)
+    {
+        try
+        {
+            if (context.UpdateBaseline)
+            {
+                notes.AddRange(FindingBaseline.Update(context.ToolkitDirectory, results));
+                return results.Select(r => r with { Blocking = false }).ToList();
+            }
+
+            var baseline = FindingBaseline.Load(context.ToolkitDirectory);
+            if (baseline is null)
+            {
+                return results;
+            }
+
+            return results.Select(result =>
+            {
+                if (result.Fingerprints is null)
+                {
+                    return result;
+                }
+
+                var known = baseline.TryGetValue(result.Tool, out var counts) ? counts : null;
+                var added = FindingBaseline.CountNew(result.Fingerprints, known);
+                var note = known is null
+                    ? $"Baseline: nincs bejegyzés erre az eszközre, mind a(z) {added} blokkoló találat újnak számít."
+                    : $"Baseline: {result.Fingerprints.Count - added} ismert, {added} új blokkoló találat.";
+                return result with
+                {
+                    Blocking = result.Blocking && added > 0,
+                    Message = string.IsNullOrEmpty(result.Message) ? note : $"{result.Message} {note}",
+                };
+            }).ToList();
+        }
+        catch (InvalidOperationException ex)
+        {
+            results.Add(new ScanResult("baseline", $".security/{FindingBaseline.FileName}", ScanStatus.Failed, null, Blocking: false, ex.Message));
+            return results;
+        }
     }
 
     /// <summary>
@@ -219,4 +271,5 @@ public sealed class ScanOrchestrator
 /// <param name="ExitCode">0 success, 1 Gate-mode block, 2 technical failure.</param>
 /// <param name="Results">Every ScanResult produced across all scanners that ran.</param>
 /// <param name="StatusFilePath">Path to the run's own status.json.</param>
-public sealed record ScanOutcome(int ExitCode, IReadOnlyList<ScanResult> Results, string StatusFilePath);
+/// <param name="Notes">Run-level console notes (e.g. what --update-baseline recorded).</param>
+public sealed record ScanOutcome(int ExitCode, IReadOnlyList<ScanResult> Results, string StatusFilePath, IReadOnlyList<string>? Notes = null);

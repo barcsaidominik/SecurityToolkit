@@ -122,6 +122,7 @@ Exit code 0 és „In sync” üzenet. Nézd át a `.security/pending-actions.md
 | `.security/security.config.local.json.example` | **igen** | minta a lokális felülíráshoz |
 | `azure-security-toolkit.yml`, `.github/workflows/security-toolkit.yml` | **igen** | a generált pipeline (amelyiket kérted); kézzel ne szerkeszd |
 | `.gitignore`, `.semgrepignore`, `Directory.Build.props`, `.editorconfig` | **igen** | a managed blokkok miatt módosultak |
+| `.security/baseline.json` | **igen**, ha van | az elfogadott (ismert) blokkoló találatok; a `scan --update-baseline` írja ([5.4](05-kiertekeles.md#baseline-csak-az-új-találat-blokkoljon)) |
 | `.security/security.config.local.json` | nem (gitignore) | gépspecifikus felülírás |
 | `.security/results/`, `bin/`, `backups/`, `npm-tools/`, `vendor/` | nem (gitignore) | futásidejű adat |
 | `.security/install-state.json`, `pending-actions.md` | nem (gitignore) | helyi telepítési állapot |

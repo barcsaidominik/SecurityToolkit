@@ -1018,4 +1018,37 @@ public class SecurityToolkitInstallerTests : IDisposable
         Assert.Contains("pool:\n  vmImage: 'ubuntu-latest'\n", azure);
         Assert.DoesNotContain("name: 'SecurityToolkit'", azure);
     }
+
+    [Fact]
+    public async Task InstallAsync_PipelineModeGate_WritesGateIntoEveryScanStepOfBothPipelines()
+    {
+        var profile = new Dictionary<string, object?>
+        {
+            ["pipelineProviders"] = new List<object?> { "azure", "github" },
+            ["pipelineMode"] = "Gate",
+        };
+
+        var outcome = await new SecurityToolkitInstaller(Templates()).InstallAsync(
+            new InstallOptions(_root, NonInteractive: true, ConfigureOnly: true), profile, toolProvisioner: null);
+
+        Assert.Equal(0, outcome.ExitCode);
+        var azure = File.ReadAllText(Path.Combine(_root, "azure-security-toolkit.yml"));
+        var github = ReadGitHubWorkflow();
+        Assert.DoesNotContain("--mode Report", azure);
+        Assert.DoesNotContain("--mode Report", github);
+        Assert.Contains("--tool gitleaks --mode Gate --run-id $(securityRunId) --history", azure);
+        Assert.Contains("--tool gitleaks --mode Gate --run-id ${{ github.run_id }}-${{ github.run_attempt }} --history", github);
+    }
+
+    [Fact]
+    public async Task InstallAsync_InvalidPipelineMode_ReturnsExitCode2()
+    {
+        var outcome = await new SecurityToolkitInstaller(Templates()).InstallAsync(
+            new InstallOptions(_root, NonInteractive: true, DryRun: true),
+            new Dictionary<string, object?> { ["pipelineMode"] = "gate" },
+            toolProvisioner: null);
+
+        Assert.Equal(2, outcome.ExitCode);
+        Assert.Contains(outcome.Messages, m => m.Contains("pipelineMode must be Report or Gate", StringComparison.Ordinal));
+    }
 }
