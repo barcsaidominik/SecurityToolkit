@@ -60,6 +60,9 @@ internal static class SecurityConfigMerger
             // Gate: a step turns red (exit 1) on a blocking finding beyond .security/baseline.json; the
             // other steps still run (condition: always()/!cancelled()).
             ["pipelineMode"] = "Report",
+            // Enabled tools the pipelines leave out (still pinned and run locally), e.g. ["sonar"]
+            // when the Sonar server is reachable from developer machines only.
+            ["pipelineSkipTools"] = new List<object?>(),
             ["agentPool"] = "SecurityToolkit",
             ["azureVmImage"] = string.Empty,
             ["privateNuGet"] = false,

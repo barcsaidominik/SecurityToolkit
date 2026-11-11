@@ -154,7 +154,8 @@ Két lehetőség van:
   a workflow ilyenkor első lépésként letölti és checksummal ellenőrzi a CLI-t, ld.
   [4.7](#47-efemer-vagy-hosted-agent-a-cli-letöltése-release-ből). Az `ubuntu-latest` image-en a Docker és a
   .NET SDK is fent van, más nem kell. A közös Sonart viszont egy hosted runner általában nem éri el, ezért
-  ott a Sonar-eszközt kapcsold ki, vagy a Sonar legyen az internetről elérhető.
+  a Sonart csak a pipeline-ból hagyd ki a `"pipelineSkipTools": ["sonar"]`-ral (helyben `--include-sonar`-ral
+  továbbra is fut), vagy a Sonar legyen az internetről elérhető.
 - **Self-hosted runner**, amin a `security-toolkit` a gépi PATH-on van (ugyanaz a gép és ugyanaz az
   `install.bat` / `install.sh`, mint az Azure agentnél, ld. [1. fejezet](01-gep-es-agent.md)). A beállítása
   lent.
@@ -257,7 +258,7 @@ Hosted agentnél ezekre figyelj:
 - **Linux image-et válassz.** A Semgrep, a Gitleaks és az OSV Linux-konténerben fut, a Windows-os hosted
   agentek Dockere viszont csak Windows-konténert futtat.
 - **A Sonar-szervernek elérhetőnek kell lennie** az agentről. Egy belső hálózati gépen futó Sonart egy
-  felhős agent nem ér el; ilyenkor kapcsold ki a Sonar-lépést, vagy maradj a self-hosted agentnél.
+  felhős agent nem ér el; ilyenkor hagyd ki a pipeline-ból a `"pipelineSkipTools": ["sonar"]`-ral (helyben megmarad), vagy maradj a self-hosted agentnél.
 - A provision minden futáskor újra letölti az image-eket és a .NET-eszközöket, ezért a futás lassabb,
   mint egy meleg self-hosted gépen.
 

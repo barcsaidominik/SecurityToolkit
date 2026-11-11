@@ -208,6 +208,7 @@ security-toolkit <parancs> --help
 | `installHook`, `installVSCodeExtensions` | git hook, VS Code extensionök |
 | `installPrerequisites`, `sdkChannel`, `nodeWingetId`, `nodeVersion` | hiányzó SDK/Node telepítése wingettel (csak Windowson; Linuxon csak jelzi a hiányt) |
 | `generatePipeline`, `pipelineProviders`, `pipelineHistory` | generáljon-e pipeline-t, és melyik platformra (`azure`, `github`) |
+| `pipelineSkipTools` | bekapcsolt eszközök, amelyeket a generált pipeline-ok kihagynak, pl. `["sonar"]`, ha a Sonar-szerver csak a fejlesztői gépekről érhető el. A lockban ugyanúgy rögzítve vannak, és helyben a szokásos módon futnak. |
 | `pipelineMode` | `Report` (alapértelmezés) vagy `Gate`: ebben a módban futnak a generált pipeline scan-lépései ([5.4](05-kiertekeles.md#54-report-vagy-gate-mód)) |
 | `agentPool`, `azureVmImage`, `privateNuGet`, `privateNpmRc` | az Azure-pipeline beállításai ([4.2](04-pipeline.md#42-pipeline-változók-és-secretek), [4.7](04-pipeline.md#47-efemer-vagy-hosted-agent-a-cli-letöltése-release-ből)) |
 | `toolkitRelease.version`, `toolkitRelease.baseUrl` | a pipeline a megadott release-ből töltse le a CLI-t (efemer/hosted agent, [4.7](04-pipeline.md#47-efemer-vagy-hosted-agent-a-cli-letöltése-release-ből)); üres verzió = a gépi PATH-on lévő CLI |

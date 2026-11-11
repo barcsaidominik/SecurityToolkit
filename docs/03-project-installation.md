@@ -74,6 +74,7 @@ It asks about all 8 tools (`Enable …?`, [their descriptions](06-local-runs-and
 | Install the fast Gitleaks staged pre-commit hook? | **yes** (see 3.6) |
 | Install the VS Code extensions of the selected tools? | yes, if the `code` command is available (SonarLint, DevSkim) |
 | Generate a separate, manually run security pipeline? | **yes**, this becomes the pipeline; it then asks whether to generate Azure DevOps and/or GitHub Actions |
+| Leave Sonar out of the generated pipeline (the Sonar server is reachable from developer machines only)? | `y` if the CI cannot reach your Sonar (e.g. a GitHub-hosted runner and a Sonar on your own machine). Sonar stays enabled and pinned, and runs locally with `--include-sonar` (`pipelineSkipTools`, see [6.4](06-local-runs-and-cli.md#64-the-keys-of-securityconfigjson)). |
 | Azure self-hosted agent pool name | the pool created in [1.4](01-machine-and-agent.md#14-creating-an-agent-pool-in-azure-devops), e.g. `SecurityToolkit` |
 | Should Gitleaks scan the whole reachable git history? | `n` = the working tree only. `y` = every earlier commit too. Useful once at the first rollout, noisy afterwards. |
 | Add a NuGetAuthenticate task for a private feed? | **yes**, if the project uses a private Azure Artifacts NuGet feed |

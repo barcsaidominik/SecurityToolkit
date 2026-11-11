@@ -307,6 +307,56 @@ public class SecurityToolkitInstallerTests : IDisposable
         Assert.False(ScannerSupport.GetBool(dotnetCoverage, "enabled"));
     }
 
+    [Fact]
+    public async Task InstallAsync_SonarInPipelineSkipTools_StaysPinnedButGetsNoPipelineStepOrSecrets()
+    {
+        // A Sonar reachable from developer machines only: enabled and pinned (local runs need the
+        // scanner), but neither pipeline gets its step, coverage publishing or secrets.
+        var profile = SonarCoverageProfile(new Dictionary<string, object?>
+        {
+            ["coverage"] = true,
+            ["testEnvironment"] = new Dictionary<string, object?> { ["ConnectionStrings__Default"] = "TEST_DB_CONNECTION" },
+        });
+        profile["pipelineProviders"] = new List<object?> { "azure", "github" };
+        profile["pipelineSkipTools"] = new List<object?> { "sonar" };
+
+        var outcome = await new SecurityToolkitInstaller(Templates()).InstallAsync(
+            new InstallOptions(_root, NonInteractive: true, ConfigureOnly: true), profile, toolProvisioner: null);
+
+        Assert.Equal(0, outcome.ExitCode);
+        foreach (var yaml in new[] { File.ReadAllText(Path.Combine(_root, "azure-security-toolkit.yml")), ReadGitHubWorkflow() })
+        {
+            Assert.DoesNotContain("--tool sonar", yaml, StringComparison.Ordinal);
+            Assert.DoesNotContain("SONAR_TOKEN", yaml, StringComparison.Ordinal);
+            Assert.DoesNotContain("TEST_DB_CONNECTION", yaml, StringComparison.Ordinal);
+            Assert.DoesNotContain("PublishCodeCoverageResults", yaml, StringComparison.Ordinal);
+            Assert.Contains("--tool gitleaks", yaml, StringComparison.Ordinal);
+        }
+
+        var tools = ScannerSupport.GetDictionary(ScannerSupport.ParseJsonObject(
+            await File.ReadAllTextAsync(Path.Combine(_root, ".security", SecurityToolkitInstaller.LockFileName))), "tools")!;
+        Assert.True(ScannerSupport.GetBool(ScannerSupport.GetDictionary(tools, "sonarScanner")!, "enabled"));
+        Assert.True(ScannerSupport.GetBool(ScannerSupport.GetDictionary(tools, "dotnetCoverage")!, "enabled"));
+
+        var github = Assert.Single(outcome.Messages, m => m.StartsWith("GitHub: ", StringComparison.Ordinal));
+        Assert.DoesNotContain("SONAR_TOKEN", github, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("""["bogus"]""", "pipelineSkipTools entries must be one of")]
+    [InlineData("""["sonar", "sonar"]""", "pipelineSkipTools must not contain duplicates")]
+    [InlineData("""[1]""", "pipelineSkipTools must be a JSON array of tool names")]
+    public async Task InstallAsync_InvalidPipelineSkipTools_ReturnsExitCode2(string json, string expectedMessage)
+    {
+        var profile = new Dictionary<string, object?> { ["pipelineSkipTools"] = ScannerSupport.ParseJsonObject($$"""{ "v": {{json}} }""")["v"] };
+
+        var outcome = await new SecurityToolkitInstaller(Templates()).InstallAsync(
+            new InstallOptions(_root, NonInteractive: true, DryRun: true), profile, toolProvisioner: null);
+
+        Assert.Equal(2, outcome.ExitCode);
+        Assert.Contains(outcome.Messages, m => m.Contains(expectedMessage, StringComparison.Ordinal));
+    }
+
     [Theory]
     [InlineData("Bad-Name", "TestDbConnectionString", "Invalid sonar.testEnvironment variable name")]
     [InlineData("SONAR_TOKEN", "Other", "Invalid sonar.testEnvironment variable name")]

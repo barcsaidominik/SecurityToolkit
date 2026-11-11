@@ -15,7 +15,7 @@ internal static class PipelineGenerator
     /// in the generated step's <c>displayName</c> and (lowercased key) as the "tools.&lt;key&gt;"
     /// config lookup and the CLI's <c>--tool</c> value.
     /// </summary>
-    private static readonly string[] PipelineToolOrder =
+    internal static readonly string[] PipelineToolOrder =
         { "analyzers", "nuget", "npm", "semgrep", "gitleaks", "osv", "devskim", "sonar" };
 
     internal static readonly string[] SupportedProviders = { "azure", "github" };
@@ -64,7 +64,10 @@ internal static class PipelineGenerator
         }
     }
 
-    /// <summary>One scan step per enabled tool, in <see cref="PipelineToolOrder"/>, shared by every provider.</summary>
+    /// <summary>
+    /// One scan step per enabled tool not in <c>pipelineSkipTools</c>, in <see cref="PipelineToolOrder"/>,
+    /// shared by every provider.
+    /// </summary>
     /// <param name="TrailingArguments">CLI arguments written after --run-id (keeps the historical Azure order).</param>
     /// <param name="SecretEnvironment">Step env var name → pipeline variable/secret NAME.</param>
     private sealed record PipelineScanStep(string Tool, string Mode, string TrailingArguments, IReadOnlyList<KeyValuePair<string, string>> SecretEnvironment);
@@ -75,7 +78,7 @@ internal static class PipelineGenerator
 
         foreach (var tool in PipelineToolOrder)
         {
-            if (!config.IsToolEnabled(tool))
+            if (!config.IsToolInPipeline(tool))
             {
                 continue;
             }
@@ -378,7 +381,7 @@ internal static class PipelineGenerator
         // The Sonar step's coverage reports (.NET vscoveragexml + one lcov per Angular project) are
         // also published to the run's Code Coverage tab; PublishCodeCoverageResults@2 reads both
         // formats natively and merges them into one report.
-        if (config.IsToolEnabled("sonar") && config.SonarCoverage)
+        if (config.IsToolInPipeline("sonar") && config.SonarCoverage)
         {
             yaml += "\n" +
                     "- task: PublishCodeCoverageResults@2\n" +

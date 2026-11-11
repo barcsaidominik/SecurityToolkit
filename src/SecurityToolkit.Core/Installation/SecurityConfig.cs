@@ -36,6 +36,12 @@ internal sealed record SecurityConfig
 
     public required string PipelineMode { get; init; }
 
+    /// <summary>
+    /// pipelineSkipTools: enabled tools (still pinned and run locally) that the generated pipelines
+    /// get no step for, e.g. a Sonar reachable from developer machines only.
+    /// </summary>
+    public required IReadOnlySet<string> PipelineSkipTools { get; init; }
+
     public required string AgentPool { get; init; }
 
     public required string AzureVmImage { get; init; }
@@ -68,6 +74,9 @@ internal sealed record SecurityConfig
     public required string ToolkitReleaseBaseUrl { get; init; }
 
     public bool IsToolEnabled(string name) => EnabledTools.Contains(name);
+
+    /// <summary>The tool is enabled and the generated pipelines run it (not in pipelineSkipTools).</summary>
+    public bool IsToolInPipeline(string name) => IsToolEnabled(name) && !PipelineSkipTools.Contains(name);
 
     public bool HasPipelineProvider(string name) => PipelineProviders.Contains(name, StringComparer.Ordinal);
 
@@ -102,6 +111,7 @@ internal sealed record SecurityConfig
             PipelineProviders = GetStringList(config, "pipelineProviders"),
             PipelineHistory = GetBool(config, "pipelineHistory"),
             PipelineMode = GetString(config, "pipelineMode") ?? "Report",
+            PipelineSkipTools = GetStringList(config, "pipelineSkipTools").ToHashSet(StringComparer.Ordinal),
             AgentPool = GetString(config, "agentPool") ?? string.Empty,
             AzureVmImage = GetString(config, "azureVmImage") ?? string.Empty,
             PrivateNuGet = GetBool(config, "privateNuGet"),

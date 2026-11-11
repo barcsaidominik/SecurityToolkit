@@ -209,6 +209,7 @@ security-toolkit <command> --help
 | `installHook`, `installVSCodeExtensions` | git hook, VS Code extensions |
 | `installPrerequisites`, `sdkChannel`, `nodeWingetId`, `nodeVersion` | install a missing SDK/Node with winget (Windows only; on Linux it only reports what is missing) |
 | `generatePipeline`, `pipelineProviders`, `pipelineHistory` | whether to generate a pipeline, and for which platform (`azure`, `github`) |
+| `pipelineSkipTools` | enabled tools the generated pipelines leave out, e.g. `["sonar"]` when the Sonar server is reachable from developer machines only. They stay pinned in the lock and run locally as usual. |
 | `pipelineMode` | `Report` (default) or `Gate`: the mode of the generated pipeline's scan steps ([5.4](05-evaluation.md#54-report-or-gate-mode)) |
 | `agentPool`, `azureVmImage`, `privateNuGet`, `privateNpmRc` | the Azure pipeline's settings ([4.2](04-pipeline.md#42-pipeline-variables-and-secrets), [4.7](04-pipeline.md#47-ephemeral-or-hosted-agent-downloading-the-cli-from-a-release)) |
 | `toolkitRelease.version`, `toolkitRelease.baseUrl` | the pipeline downloads the CLI from the given release (ephemeral/hosted agent, [4.7](04-pipeline.md#47-ephemeral-or-hosted-agent-downloading-the-cli-from-a-release)); an empty version = the CLI on the machine PATH |

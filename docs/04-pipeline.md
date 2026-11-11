@@ -155,7 +155,7 @@ There are two options:
   the workflow then downloads the CLI as its first step and verifies its checksum, see
   [4.7](#47-ephemeral-or-hosted-agent-downloading-the-cli-from-a-release). The `ubuntu-latest` image has
   Docker and the .NET SDK, nothing else is needed. A hosted runner usually cannot reach the shared Sonar,
-  though, so turn the Sonar tool off there, or make Sonar reachable from the internet.
+  though: leave Sonar out of the pipeline only with `"pipelineSkipTools": ["sonar"]` (it keeps running locally with `--include-sonar`), or make Sonar reachable from the internet.
 - **Self-hosted runner** with `security-toolkit` on the machine PATH (the same machine and the same
   `install.bat` / `install.sh` as for the Azure agent, see [chapter 1](01-machine-and-agent.md)). Its
   setup is below.
@@ -259,7 +259,7 @@ With a hosted agent, mind these:
 - **Pick a Linux image.** Semgrep, Gitleaks and OSV run in Linux containers, while the Docker of the
   Windows hosted agents runs Windows containers only.
 - **The Sonar server has to be reachable** from the agent. A cloud agent cannot reach a Sonar on an
-  internal network; in that case turn the Sonar step off, or stay with the self-hosted agent.
+  internal network; in that case leave it out of the pipeline with `"pipelineSkipTools": ["sonar"]` (local runs keep it), or stay with the self-hosted agent.
 - The provision pulls the images and the .NET tools again on every run, so the run is slower than on a
   warm self-hosted machine.
 

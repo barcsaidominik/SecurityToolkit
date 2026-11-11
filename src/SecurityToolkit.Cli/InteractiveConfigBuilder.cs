@@ -172,6 +172,21 @@ public static class InteractiveConfigBuilder
 
             config["pipelineProviders"] = providers;
 
+            if (ScannerSupport.GetBool(tools, "sonar"))
+            {
+                // Sonar stays enabled (pinned, runs locally); only the pipelines skip its step.
+                var skip = ScannerSupport.GetList(config, "pipelineSkipTools").OfType<string>()
+                    .Where(t => t != "sonar").Cast<object?>().ToList();
+                if (prompts.ReadYesNo(
+                    "Leave Sonar out of the generated pipeline (the Sonar server is reachable from developer machines only)?",
+                    ScannerSupport.GetList(config, "pipelineSkipTools").OfType<string>().Contains("sonar")))
+                {
+                    skip.Add("sonar");
+                }
+
+                config["pipelineSkipTools"] = skip;
+            }
+
             config["pipelineHistory"] = prompts.ReadYesNo(
                 "Should Gitleaks scan the whole reachable git history (--history)? (no=working tree only)", ScannerSupport.GetBool(config, "pipelineHistory"));
             config["pipelineMode"] = prompts.ReadYesNo(

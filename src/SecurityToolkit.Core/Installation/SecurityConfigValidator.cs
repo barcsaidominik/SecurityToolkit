@@ -158,6 +158,25 @@ internal static class SecurityConfigValidator
             throw new InvalidOperationException("pipelineProviders must not contain duplicates.");
         }
 
+        if (!config.TryGetValue("pipelineSkipTools", out var rawSkip)
+            || rawSkip is not IEnumerable<object?> skipValues
+            || skipValues.Any(s => s is not string))
+        {
+            throw new InvalidOperationException("pipelineSkipTools must be a JSON array of tool names.");
+        }
+
+        var skipTools = GetStringList(config, "pipelineSkipTools");
+        if (skipTools.Any(t => !PipelineGenerator.PipelineToolOrder.Contains(t, StringComparer.Ordinal)))
+        {
+            throw new InvalidOperationException(
+                $"pipelineSkipTools entries must be one of: {string.Join(", ", PipelineGenerator.PipelineToolOrder)}.");
+        }
+
+        if (skipTools.Distinct(StringComparer.Ordinal).Count() != skipTools.Count)
+        {
+            throw new InvalidOperationException("pipelineSkipTools must not contain duplicates.");
+        }
+
         if (!GetBool(config, "generatePipeline"))
         {
             return;

@@ -75,6 +75,7 @@ Mind a 8 eszközre rákérdez (`Enable …?`, [leírásuk](06-helyi-futtatas-es-
 | Install the fast Gitleaks staged pre-commit hook? | **igen** (ld. 3.6) |
 | Install the VS Code extensions of the selected tools? | igen, ha a `code` parancs elérhető (SonarLint, DevSkim) |
 | Generate a separate, manually run security pipeline? | **igen**, ebből lesz a pipeline; utána megkérdezi, Azure DevOps és/vagy GitHub Actions legyen-e |
+| Leave Sonar out of the generated pipeline (the Sonar server is reachable from developer machines only)? | `y`, ha a CI nem éri el a Sonarodat (pl. GitHub-hosted runner és a saját gépeden futó Sonar). A Sonar bekapcsolva és rögzítve marad, és helyben `--include-sonar`-ral fut (`pipelineSkipTools`, ld. [6.4](06-helyi-futtatas-es-cli.md#64-a-securityconfigjson-kulcsai)). |
 | Azure self-hosted agent pool name | az [1.4](01-gep-es-agent.md#14-agent-pool-létrehozása-az-azure-devops-ban)-ben létrehozott pool, pl. `SecurityToolkit` |
 | Should Gitleaks scan the whole reachable git history? | `n` = csak a munkaterület. `y` = minden korábbi commit is. Első bevezetéskor egyszer hasznos, utána zajos. |
 | Add a NuGetAuthenticate task for a private feed? | **igen**, ha a projekt privát Azure Artifacts NuGet feedet használ |

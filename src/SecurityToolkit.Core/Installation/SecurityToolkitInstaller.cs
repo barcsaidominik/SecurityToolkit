@@ -468,7 +468,7 @@ public sealed class SecurityToolkitInstaller
             : $"it runs on a runner (runs-on: {labels}) that has security-toolkit on PATH (install.bat / install.sh); for a GitHub-hosted runner, set toolkitRelease.version.";
 
         var secrets = new List<string>();
-        if (settings.IsToolEnabled("sonar"))
+        if (settings.IsToolInPipeline("sonar"))
         {
             // testEnvironment only feeds the Sonar step's env block.
             secrets.Add("SONAR_TOKEN");
