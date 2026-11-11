@@ -29,10 +29,9 @@ internal static class PipelineGenerator
     private const string UploadSarifAction = "github/codeql-action/upload-sarif@1fc58d04a4d4374f921bdac573c3811c240f9c26 # v4.39.2";
 
     internal static void Write(
-        BackupService backup, string root, IDictionary<string, object?> config,
+        BackupService backup, string root, SecurityConfig config,
         IDictionary<string, object?> lockData, List<string> messages)
     {
-        var providers = GetStringList(config, "pipelineProviders");
         var release = ToolkitReleasePin.FromLock(lockData);
         if (release is { IsPinned: false })
         {
@@ -41,7 +40,7 @@ internal static class PipelineGenerator
                 "telepítő lépése ezért hibával áll meg. Futtass egy teljes (--configure-only nélküli) installt.");
         }
 
-        if (providers.Contains("azure"))
+        if (config.HasPipelineProvider("azure"))
         {
             WriteAzurePipelineYaml(backup, root, config, release);
         }
@@ -50,11 +49,11 @@ internal static class PipelineGenerator
             messages.Add($"A korábban generált {AzurePipelineFileName} már nem frissül (az azure nincs a pipelineProviders-ben). Ha nincs rá szükség, töröld kézzel.");
         }
 
-        if (providers.Contains("github"))
+        if (config.HasPipelineProvider("github"))
         {
             WriteGitHubWorkflow(backup, root, config, release);
 
-            if (GetBool(config, "privateNuGet") || !string.IsNullOrEmpty(GetString(config, "privateNpmRc")))
+            if (config.PrivateNuGet || config.PrivateNpmRc.Length > 0)
             {
                 messages.Add("GitHub: a privateNuGet/privateNpmRc csak az Azure pipeline-ba ír hitelesítő lépést; a GitHub workflow-ban a privát feed elérését a runneren kell megoldani.");
             }
@@ -70,22 +69,19 @@ internal static class PipelineGenerator
     /// <param name="SecretEnvironment">Step env var name → pipeline variable/secret NAME.</param>
     private sealed record PipelineScanStep(string Tool, string Mode, string TrailingArguments, IReadOnlyList<KeyValuePair<string, string>> SecretEnvironment);
 
-    private static List<PipelineScanStep> BuildPipelineScanSteps(IDictionary<string, object?> config)
+    private static List<PipelineScanStep> BuildPipelineScanSteps(SecurityConfig config)
     {
-        var tools = GetToolsDict(config);
-        var historyEnabled = GetBool(config, "pipelineHistory");
-        var mode = GetString(config, "pipelineMode") ?? "Report";
         var steps = new List<PipelineScanStep>();
 
         foreach (var tool in PipelineToolOrder)
         {
-            if (!GetBool(tools, tool))
+            if (!config.IsToolEnabled(tool))
             {
                 continue;
             }
 
             var arguments = string.Empty;
-            if (tool == "gitleaks" && historyEnabled)
+            if (tool == "gitleaks" && config.PipelineHistory)
             {
                 arguments += " --history";
             }
@@ -98,17 +94,13 @@ internal static class PipelineGenerator
 
                 // Secret pipeline variables never reach a step's environment implicitly; each one the
                 // coverage tests need must be mapped here (names validated in ValidateSonarCoverage).
-                var sonar = GetDict(config, "sonar");
-                if (GetBool(sonar, "coverage") && TryGetDict(sonar, "testEnvironment") is { } testEnvironment)
+                if (config.SonarCoverage)
                 {
-                    foreach (var (name, variable) in testEnvironment.OrderBy(e => e.Key, StringComparer.Ordinal))
-                    {
-                        environment.Add(new(name, (string)variable!));
-                    }
+                    environment.AddRange(config.SonarTestEnvironment);
                 }
             }
 
-            steps.Add(new PipelineScanStep(tool, mode, arguments, environment));
+            steps.Add(new PipelineScanStep(tool, config.PipelineMode, arguments, environment));
         }
 
         return steps;
@@ -199,16 +191,16 @@ internal static class PipelineGenerator
     /// and a Windows runner without pwsh falls back to the built-in Windows PowerShell).
     /// </summary>
     private static void WriteGitHubWorkflow(
-        BackupService backup, string root, IDictionary<string, object?> config, ToolkitReleasePin? release)
+        BackupService backup, string root, SecurityConfig config, ToolkitReleasePin? release)
     {
         const string workspace = "${{ github.workspace }}";
         // run_attempt: a re-run keeps run_id, and must not merge into (or collide with) the first attempt.
         const string runId = "${{ github.run_id }}-${{ github.run_attempt }}";
         const string notCancelled = "${{ !cancelled() }}";
 
-        var codeScanning = GetBool(config, "githubCodeScanning");
-        var schedule = GetString(config, "githubSchedule") ?? string.Empty;
-        var runsOn = string.Join(", ", GetStringList(config, "githubRunsOn").Select(YamlQuote));
+        var codeScanning = config.GitHubCodeScanning;
+        var schedule = config.GitHubSchedule;
+        var runsOn = string.Join(", ", config.GitHubRunsOn.Select(YamlQuote));
 
         var yaml = "name: Security Toolkit\n" +
                    "on:\n" +
@@ -306,13 +298,13 @@ internal static class PipelineGenerator
     }
 
     private static void WriteAzurePipelineYaml(
-        BackupService backup, string root, IDictionary<string, object?> config, ToolkitReleasePin? release)
+        BackupService backup, string root, SecurityConfig config, ToolkitReleasePin? release)
     {
         // A Microsoft-hosted agent is selected by image, a self-hosted (or scale-set) one by pool name.
-        var vmImage = GetString(config, "azureVmImage") ?? string.Empty;
+        var vmImage = config.AzureVmImage;
         var pool = vmImage.Length > 0
             ? $"pool:\n  vmImage: {YamlQuote(vmImage)}\n"
-            : $"pool:\n  name: {YamlQuote(GetString(config, "agentPool") ?? string.Empty)}\n";
+            : $"pool:\n  name: {YamlQuote(config.AgentPool)}\n";
         var yaml = "trigger: none\n" +
                    "pr: none\n" +
                    pool +
@@ -324,13 +316,13 @@ internal static class PipelineGenerator
                    "  fetchDepth: 0\n" +
                    "  persistCredentials: false\n";
 
-        if (GetBool(config, "privateNuGet"))
+        if (config.PrivateNuGet)
         {
             yaml += "\n- task: NuGetAuthenticate@1\n";
         }
 
-        var privateNpmRc = GetString(config, "privateNpmRc");
-        if (!string.IsNullOrEmpty(privateNpmRc))
+        var privateNpmRc = config.PrivateNpmRc;
+        if (privateNpmRc.Length > 0)
         {
             yaml += $"\n- task: npmAuthenticate@0\n  inputs:\n    workingFile: {YamlQuote(privateNpmRc)}\n";
         }
@@ -366,8 +358,6 @@ internal static class PipelineGenerator
                 "- script: security-toolkit provision --project-root \"$(Build.SourcesDirectory)\" --require-pinned\n" +
                 "  displayName: Initialize pinned security tools\n";
 
-        var tools = GetToolsDict(config);
-
         foreach (var step in BuildPipelineScanSteps(config))
         {
             // Quoted: an agent work directory containing spaces would otherwise split the path into
@@ -388,7 +378,7 @@ internal static class PipelineGenerator
         // The Sonar step's coverage reports (.NET vscoveragexml + one lcov per Angular project) are
         // also published to the run's Code Coverage tab; PublishCodeCoverageResults@2 reads both
         // formats natively and merges them into one report.
-        if (GetBool(tools, "sonar") && GetBool(GetDict(config, "sonar"), "coverage"))
+        if (config.IsToolEnabled("sonar") && config.SonarCoverage)
         {
             yaml += "\n" +
                     "- task: PublishCodeCoverageResults@2\n" +

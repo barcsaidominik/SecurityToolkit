@@ -162,9 +162,11 @@ public sealed class SecurityToolkitInstaller
         // project key/port, missing dotnetTarget, etc.) — they must surface through the
         // same InstallOutcome.Messages/ExitCode contract as every other expected failure
         // below, not as an unhandled exception/stack trace at the CLI boundary.
+        SecurityConfig settings;
         try
         {
             SecurityConfigValidator.Validate(config, scan);
+            settings = SecurityConfig.From(config);
         }
         catch (InvalidOperationException ex)
         {
@@ -185,14 +187,14 @@ public sealed class SecurityToolkitInstaller
 
         try
         {
-            WriteOwnedTemplates(backup, securityDirectory, config);
+            WriteOwnedTemplates(backup, securityDirectory, settings);
             RemoveRetiredFiles(backup, securityDirectory, messages, options.CheckOnly);
             backup.SaveManagedText(Path.Combine(securityDirectory, ConfigFileName), ToolkitJson.Serialize(config));
 
-            ProjectWiring.WriteIgnoreBlocks(backup, root, config);
-            ProjectWiring.WireDotNetProjects(backup, root, scan, config);
+            ProjectWiring.WriteIgnoreBlocks(backup, root, settings);
+            ProjectWiring.WireDotNetProjects(backup, root, scan, settings);
 
-            var lockData = SecurityLockBuilder.Build(config, securityDirectory);
+            var lockData = SecurityLockBuilder.Build(settings, securityDirectory);
 
             // The release checksums must be pinned before the lock and the pipelines are written: the
             // pipelines embed them. --configure-only/--check never download (the pipeline step then
@@ -220,9 +222,9 @@ public sealed class SecurityToolkitInstaller
 
             backup.SaveManagedText(Path.Combine(securityDirectory, LockFileName), ToolkitJson.Serialize(lockData), owned: true);
 
-            if (GetBool(config, "generatePipeline"))
+            if (settings.GeneratePipeline)
             {
-                PipelineGenerator.Write(backup, root, config, lockData, messages);
+                PipelineGenerator.Write(backup, root, settings, lockData, messages);
             }
 
             if (options.CheckOnly)
@@ -250,7 +252,7 @@ public sealed class SecurityToolkitInstaller
                     "a SecurityToolkit forrás-repóban) — a .security/bin/ másolatra nincs többé szükség, kézzel törölhető.");
             }
 
-            if (GetBool(config, "installHook") && dependencies.GitHookInstaller is not null)
+            if (settings.InstallHook && dependencies.GitHookInstaller is not null)
             {
                 var hookMessage = await dependencies.GitHookInstaller.InstallAsync(root, backup, dryRun: false, cancellationToken)
                     .ConfigureAwait(false);
@@ -270,11 +272,10 @@ public sealed class SecurityToolkitInstaller
 
             if (!options.ConfigureOnly)
             {
-                if (GetBool(GetToolsDict(config), "semgrep") && GetBool(config, "downloadSemgrepRules") && dependencies.SemgrepRuleDownloader is not null)
+                if (settings.IsToolEnabled("semgrep") && settings.DownloadSemgrepRules && dependencies.SemgrepRuleDownloader is not null)
                 {
-                    var rulesets = GetStringList(config, "semgrepRulesets");
                     var ruleMessages = await dependencies.SemgrepRuleDownloader.DownloadAsync(
-                        root, securityDirectory, rulesets, priorHashes ?? new Dictionary<string, string>(StringComparer.Ordinal), backup, dryRun: false, cancellationToken)
+                        root, securityDirectory, settings.SemgrepRulesets, priorHashes ?? new Dictionary<string, string>(StringComparer.Ordinal), backup, dryRun: false, cancellationToken)
                         .ConfigureAwait(false);
                     messages.AddRange(ruleMessages);
                 }
@@ -283,10 +284,10 @@ public sealed class SecurityToolkitInstaller
                 {
                     var prerequisiteOutcome = await dependencies.PrerequisiteProvisioner.EnsureAsync(
                         GetToolsDict(config),
-                        GetBool(config, "installPrerequisites"),
-                        GetString(config, "sdkChannel") ?? string.Empty,
-                        GetString(config, "nodeWingetId") ?? string.Empty,
-                        GetString(config, "nodeVersion") ?? string.Empty,
+                        settings.InstallPrerequisites,
+                        settings.SdkChannel,
+                        settings.NodeWingetId,
+                        settings.NodeVersion,
                         cancellationToken).ConfigureAwait(false);
                     messages.AddRange(prerequisiteOutcome.Messages);
                     if (!prerequisiteOutcome.Completed)
@@ -306,11 +307,10 @@ public sealed class SecurityToolkitInstaller
                     }
                 }
 
-                if (GetBool(config, "installVSCodeExtensions") && dependencies.VsCodeExtensionInstaller is not null)
+                if (settings.InstallVSCodeExtensions && dependencies.VsCodeExtensionInstaller is not null)
                 {
-                    var tools = GetToolsDict(config);
                     await dependencies.VsCodeExtensionInstaller.InstallAsync(
-                        GetBool(tools, "sonar"), GetBool(tools, "devskim"), cancellationToken).ConfigureAwait(false);
+                        settings.IsToolEnabled("sonar"), settings.IsToolEnabled("devskim"), cancellationToken).ConfigureAwait(false);
                 }
             }
             else
@@ -318,20 +318,19 @@ public sealed class SecurityToolkitInstaller
                 messages.Add("ConfigureOnly: a CLI/image telepítés és a gyártói szabályletöltés még nem történt meg. Futtasd újra ConfigureOnly nélkül.");
             }
 
-            if (GetBool(GetToolsDict(config), "sonar"))
+            if (settings.IsToolEnabled("sonar"))
             {
                 messages.Add("Sonar: admin belépés/jelszócsere, private projekt és project analysis token létrehozása szükséges. Token csak SONAR_TOKEN environment változóból. Feltöltés: security-toolkit scan --include-sonar. A közös Sonar-szervert gépenként egyszer az install.bat / install.sh (security-toolkit infra install --sonar) telepíti, a projekt-install nem indítja.");
             }
 
-            if (GetBool(config, "generatePipeline"))
+            if (settings.GeneratePipeline)
             {
-                var providers = GetStringList(config, "pipelineProviders");
-                if (providers.Contains("azure"))
+                if (settings.HasPipelineProvider("azure"))
                 {
                     messages.Add("Azure: pool/repo/feed jogosultságok és a generált YAML-hoz pipeline létrehozása szükséges; a telepítő nem csatlakozik Azure-hoz.");
                 }
 
-                if (providers.Contains("github"))
+                if (settings.HasPipelineProvider("github"))
                 {
                     messages.Add(
                         $"GitHub: a {GitHubWorkflowRelativePath} egy self-hosted runnert vár (githubRunsOn címkék), amin a security-toolkit a PATH-on van; " +
@@ -396,7 +395,7 @@ public sealed class SecurityToolkitInstaller
         return (scan, config);
     }
 
-    private void WriteOwnedTemplates(BackupService backup, string securityDirectory, IDictionary<string, object?> config)
+    private void WriteOwnedTemplates(BackupService backup, string securityDirectory, SecurityConfig config)
     {
         if (_templateFiles.TryGetValue("SecurityToolkit.props", out var props))
         {
@@ -410,14 +409,12 @@ public sealed class SecurityToolkitInstaller
             backup.SaveManagedText(Path.Combine(securityDirectory, $"{LocalConfigFileName}.example"), localExample);
         }
 
-        var tools = GetToolsDict(config);
-
-        if (GetBool(tools, "gitleaks") && _templateFiles.TryGetValue("gitleaks.toml", out var gitleaksToml))
+        if (config.IsToolEnabled("gitleaks") && _templateFiles.TryGetValue("gitleaks.toml", out var gitleaksToml))
         {
             backup.SaveManagedText(Path.Combine(securityDirectory, "gitleaks.toml"), gitleaksToml, owned: true);
         }
 
-        if (GetBool(tools, "semgrep") && _templateFiles.TryGetValue("semgrep-starter.yml", out var semgrepStarter))
+        if (config.IsToolEnabled("semgrep") && _templateFiles.TryGetValue("semgrep-starter.yml", out var semgrepStarter))
         {
             backup.SaveManagedText(Path.Combine(securityDirectory, "rules", "starter.yml"), semgrepStarter, owned: true);
         }

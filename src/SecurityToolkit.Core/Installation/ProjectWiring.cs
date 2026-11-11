@@ -1,5 +1,3 @@
-using static SecurityToolkit.Core.Installation.ConfigAccess;
-
 namespace SecurityToolkit.Core.Installation;
 
 /// <summary>
@@ -13,7 +11,7 @@ internal static class ProjectWiring
         "CA3001", "CA3002", "CA3003", "CA3006", "CA3007", "CA3009", "CA3075",
     };
 
-    internal static void WriteIgnoreBlocks(BackupService backup, string root, IDictionary<string, object?> config)
+    internal static void WriteIgnoreBlocks(BackupService backup, string root, SecurityConfig config)
     {
         var gitignorePath = Path.Combine(root, ".gitignore");
         var gitignoreBody = string.Join('\n', new[]
@@ -34,7 +32,7 @@ internal static class ProjectWiring
         var existingGitignore = File.Exists(gitignorePath) ? File.ReadAllText(gitignorePath) : string.Empty;
         backup.SaveManagedText(gitignorePath, ManagedBlockWriter.UpdateBlock(existingGitignore, gitignoreBody));
 
-        if (GetBool(GetToolsDict(config), "semgrep"))
+        if (config.IsToolEnabled("semgrep"))
         {
             var semgrepIgnorePath = Path.Combine(root, ".semgrepignore");
             var semgrepIgnoreBody = string.Join('\n', new[]
@@ -46,10 +44,9 @@ internal static class ProjectWiring
         }
     }
 
-    internal static void WireDotNetProjects(BackupService backup, string root, ProjectScanResult scan, IDictionary<string, object?> config)
+    internal static void WireDotNetProjects(BackupService backup, string root, ProjectScanResult scan, SecurityConfig config)
     {
-        var tools = GetToolsDict(config);
-        if (!GetBool(tools, "analyzers") && !GetBool(tools, "nuget"))
+        if (!config.IsToolEnabled("analyzers") && !config.IsToolEnabled("nuget"))
         {
             return;
         }
@@ -83,7 +80,7 @@ internal static class ProjectWiring
             nearest ??= Path.Combine(root, "Directory.Build.props");
             propsPaths.Add(nearest);
 
-            if (GetBool(tools, "analyzers"))
+            if (config.IsToolEnabled("analyzers"))
             {
                 editorConfigPaths.Add(Path.Combine(directory, ".editorconfig"));
             }

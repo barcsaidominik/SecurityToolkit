@@ -12,11 +12,8 @@ internal static class SecurityLockBuilder
     /// never here. Reads its own prior state directly (not passed in) so callers don't have to
     /// remember to read/thread it.
     /// </summary>
-    internal static IDictionary<string, object?> Build(IDictionary<string, object?> config, string securityDirectory)
+    internal static IDictionary<string, object?> Build(SecurityConfig config, string securityDirectory)
     {
-        var tools = GetToolsDict(config);
-        var images = GetDict(config, "images");
-        var versions = GetDict(config, "versions");
         var oldLock = ReadExistingLock(securityDirectory);
         var oldTools = oldLock is not null ? GetDict(oldLock, "tools") : new Dictionary<string, object?>();
 
@@ -24,8 +21,8 @@ internal static class SecurityLockBuilder
 
         foreach (var name in new[] { "semgrep", "gitleaks", "osv" })
         {
-            var enabled = GetBool(tools, name);
-            var image = GetString(images, name) ?? string.Empty;
+            var enabled = config.IsToolEnabled(name);
+            var image = config.Images.GetValueOrDefault(name, string.Empty);
             var wasReady = false;
 
             if (TryGetDict(oldTools, name) is { } oldTool
@@ -40,7 +37,7 @@ internal static class SecurityLockBuilder
             {
                 ["enabled"] = enabled,
                 ["image"] = image,
-                ["sourceImage"] = GetString(images, name) ?? string.Empty,
+                ["sourceImage"] = config.Images.GetValueOrDefault(name, string.Empty),
                 ["ready"] = enabled && wasReady,
             };
         }
@@ -49,9 +46,9 @@ internal static class SecurityLockBuilder
         {
             var enabled = name switch
             {
-                "sonarScanner" => GetBool(tools, "sonar"),
-                "dotnetCoverage" => GetBool(tools, "sonar") && GetBool(GetDict(config, "sonar"), "coverage"),
-                _ => GetBool(tools, name),
+                "sonarScanner" => config.IsToolEnabled("sonar"),
+                "dotnetCoverage" => config.IsToolEnabled("sonar") && config.SonarCoverage,
+                _ => config.IsToolEnabled(name),
             };
             var package = name switch
             {
@@ -60,7 +57,7 @@ internal static class SecurityLockBuilder
                 _ => "dotnet-coverage",
             };
 
-            var version = GetString(versions, name) ?? string.Empty;
+            var version = config.Versions.GetValueOrDefault(name, string.Empty);
             if (string.IsNullOrEmpty(version) && TryGetDict(oldTools, name) is { } oldTool2)
             {
                 version = GetString(oldTool2, "version") ?? string.Empty;
@@ -86,11 +83,10 @@ internal static class SecurityLockBuilder
         };
 
         // Only present when enabled, so a project that never uses it keeps a byte-identical lock.
-        var toolkitRelease = GetDict(config, "toolkitRelease");
-        var releaseVersion = GetString(toolkitRelease, "version") ?? string.Empty;
+        var releaseVersion = config.ToolkitReleaseVersion;
         if (releaseVersion.Length > 0)
         {
-            var baseUrl = (GetString(toolkitRelease, "baseUrl") ?? SecurityToolkitInstaller.DefaultToolkitReleaseBaseUrl).TrimEnd('/');
+            var baseUrl = config.ToolkitReleaseBaseUrl.TrimEnd('/');
             var hashes = new Dictionary<string, object?>(StringComparer.Ordinal);
             if (oldLock is not null
                 && TryGetDict(oldLock, "toolkitRelease") is { } oldRelease
