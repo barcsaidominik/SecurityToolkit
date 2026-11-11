@@ -36,8 +36,8 @@ internal static class PipelineGenerator
         if (release is { IsPinned: false })
         {
             messages.Add(
-                $"toolkitRelease: a security-toolkit v{release.Version} checksumjai még nincsenek rögzítve; a generált pipeline " +
-                "telepítő lépése ezért hibával áll meg. Futtass egy teljes (--configure-only nélküli) installt.");
+                $"toolkitRelease: the checksums of security-toolkit v{release.Version} are not pinned yet, so the install step of the " +
+                "generated pipeline fails. Run a full install (without --configure-only).");
         }
 
         if (config.HasPipelineProvider("azure"))
@@ -46,7 +46,7 @@ internal static class PipelineGenerator
         }
         else if (File.Exists(Path.Combine(root, AzurePipelineFileName)))
         {
-            messages.Add($"A korábban generált {AzurePipelineFileName} már nem frissül (az azure nincs a pipelineProviders-ben). Ha nincs rá szükség, töröld kézzel.");
+            messages.Add($"The previously generated {AzurePipelineFileName} is no longer updated (azure is not in pipelineProviders). Delete it by hand if you no longer need it.");
         }
 
         if (config.HasPipelineProvider("github"))
@@ -55,12 +55,12 @@ internal static class PipelineGenerator
 
             if (config.PrivateNuGet || config.PrivateNpmRc.Length > 0)
             {
-                messages.Add("GitHub: a privateNuGet/privateNpmRc csak az Azure pipeline-ba ír hitelesítő lépést; a GitHub workflow-ban a privát feed elérését a runneren kell megoldani.");
+                messages.Add("GitHub: privateNuGet/privateNpmRc only add an authentication step to the Azure pipeline; for the GitHub workflow, set up private feed access on the runner.");
             }
         }
         else if (File.Exists(Path.Combine(root, SecurityToolkitInstaller.GitHubWorkflowRelativePath)))
         {
-            messages.Add($"A korábban generált {SecurityToolkitInstaller.GitHubWorkflowRelativePath} már nem frissül (a github nincs a pipelineProviders-ben). Ha nincs rá szükség, töröld kézzel.");
+            messages.Add($"The previously generated {SecurityToolkitInstaller.GitHubWorkflowRelativePath} is no longer updated (github is not in pipelineProviders). Delete it by hand if you no longer need it.");
         }
     }
 

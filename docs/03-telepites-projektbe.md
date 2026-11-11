@@ -33,19 +33,20 @@ git switch -c security-toolkit
 security-toolkit install --project-root .
 ```
 
-Ha még nincs `.security/security.config.json`, a teljes varázsló indul. Igen/nem kérdéseknél
-`i`/`n` a válasz, Enter = a szögletes zárójelben nagybetűvel jelölt alapérték.
+Ha még nincs `.security/security.config.json`, a teljes varázsló indul. A varázsló angolul kérdez;
+az alábbi táblázatok a kérdés szövegét idézik. Igen/nem kérdéseknél `y`/`n` a válasz, Enter = a
+szögletes zárójelben nagybetűvel jelölt alapérték.
 
 ### Célok
 
 | Kérdés | Teendő |
 |---|---|
-| **.NET solution/projekt célok** | a felsorolt `.sln`/`.slnx`/`.csproj` közül válaszd ki, mit vizsgáljon (sorszámok vesszővel; Enter = mind; 0 = egyik sem). Általában a fő solution. |
-| **Frontend/npm célkönyvtárak** | az `package.json`-t tartalmazó mappák közül a valódi frontend(ek), pl. `src/Client`. |
+| **.NET solution/project targets** | a felsorolt `.sln`/`.slnx`/`.csproj` közül válaszd ki, mit vizsgáljon (sorszámok vesszővel; Enter = mind; 0 = egyik sem). Általában a fő solution. |
+| **Frontend/npm target directories** | az `package.json`-t tartalmazó mappák közül a valódi frontend(ek), pl. `src/Client`. |
 
 ### Eszközök
 
-Mind a 8 eszközre rákérdez ([leírásuk](06-helyi-futtatas-es-cli.md#62-a-8-scanner)):
+Mind a 8 eszközre rákérdez (`Enable …?`, [leírásuk](06-helyi-futtatas-es-cli.md#62-a-8-scanner)):
 
 | Eszköz | Javaslat |
 |---|---|
@@ -62,33 +63,33 @@ Mind a 8 eszközre rákérdez ([leírásuk](06-helyi-futtatas-es-cli.md#62-a-8-s
 
 | Kérdés | Javaslat / magyarázat |
 |---|---|
-| Semgrep hatókör | `repository` = a teljes repó, C#-pal együtt. `frontend` = csak a kiválasztott frontendek, `*.cs` nélkül. A Semgrep CE a modern C#-ot hiányosan elemzi (parse-hibák), ezért ha Sonar is fut, a `frontend` a jobb választás. |
-| Hiányzó rendszerfüggőségek telepítése wingettel? | fejlesztői gépen kényelmes. Ha igen: SDK-csatorna (pl. `10.0`), Node winget-ID és verzió. Linuxon ez a kérdés elmarad (ld. [1.7](01-gep-es-agent.md#17-linux-ci-gép-windows-helyett)). |
-| Gyártói Semgrep registry szabályok letöltése? | **igen**. A `p/csharp` és `p/typescript` szabálykészlet a `.security/rules/` alá kerül, és commitolva lesz, így a CI internet nélkül, rögzített szabályokkal fut. |
+| Semgrep scope | `repository` = a teljes repó, C#-pal együtt. `frontend` = csak a kiválasztott frontendek, `*.cs` nélkül. A Semgrep CE a modern C#-ot hiányosan elemzi (parse-hibák), ezért ha Sonar is fut, a `frontend` a jobb választás. |
+| Install missing system dependencies with winget? | fejlesztői gépen kényelmes. Ha igen: SDK-csatorna (pl. `10.0`), Node winget-ID és verzió. Linuxon ez a kérdés elmarad (ld. [1.7](01-gep-es-agent.md#17-linux-ci-gép-windows-helyett)). |
+| Download the vendor Semgrep registry rules and pin them locally? | **igen**. A `p/csharp` és `p/typescript` szabálykészlet a `.security/rules/` alá kerül, és commitolva lesz, így a CI internet nélkül, rögzített szabályokkal fut. |
 | Sonar URL | a közös Sonar címe, pl. `http://ci-gep.<domain>.hu:9000` |
-| Sonar projektkulcs | a [2.2](02-sonar-es-mssql.md#projekt-létrehozása--mindig-kézzel)-ben kézzel létrehozott kulcs |
-| Egyetlen Sonar .NET target | a Sonar ezt a solutiont buildeli és elemzi |
-| Teszt-coverage mérése és feltöltése? | ld. [3.5](#35-sonar-coverage). Ha igen: `dotnet test --filter` kifejezés (üres = minden teszt), majd a teszt-env-változók `ENV_NEV=PipelineValtozoNeve` alakban, egyesével, üres sorral lezárva. |
-| Gitleaks staged pre-commit hook? | **igen** (ld. 3.6) |
-| VS Code extensionök telepítése? | igen, ha a `code` parancs elérhető (SonarLint, DevSkim) |
-| Külön manuális Azure security YAML előállítása? | **igen**, ebből lesz a pipeline |
-| Azure self-hosted agent pool neve | az [1.4](01-gep-es-agent.md#14-agent-pool-létrehozása-az-azure-devops-ban)-ben létrehozott pool, pl. `SecurityToolkit` |
-| Gitleaks a teljes git history-t vizsgálja? | `nem` = csak a munkaterület. `igen` = minden korábbi commit is. Első bevezetéskor egyszer hasznos az `igen`, utána zajos. |
-| NuGetAuthenticate task kell privát feedhez? | **igen**, ha a projekt privát Azure Artifacts NuGet feedet használ |
-| Privát npm `.npmrc` relatív útvonala | üres, ha nincs privát npm feed |
+| Sonar project key | a [2.2](02-sonar-es-mssql.md#projekt-létrehozása--mindig-kézzel)-ben kézzel létrehozott kulcs |
+| Single Sonar .NET target | a Sonar ezt a solutiont buildeli és elemzi |
+| Measure test coverage and upload it to Sonar? | ld. [3.5](#35-sonar-coverage). Ha igen: `dotnet test --filter` kifejezés (üres = minden teszt), majd a teszt-env-változók `ENV_NAME=PipelineVariableName` alakban, egyesével, üres sorral lezárva. |
+| Install the fast Gitleaks staged pre-commit hook? | **igen** (ld. 3.6) |
+| Install the VS Code extensions of the selected tools? | igen, ha a `code` parancs elérhető (SonarLint, DevSkim) |
+| Generate a separate, manually run security pipeline? | **igen**, ebből lesz a pipeline; utána megkérdezi, Azure DevOps és/vagy GitHub Actions legyen-e |
+| Azure self-hosted agent pool name | az [1.4](01-gep-es-agent.md#14-agent-pool-létrehozása-az-azure-devops-ban)-ben létrehozott pool, pl. `SecurityToolkit` |
+| Should Gitleaks scan the whole reachable git history? | `n` = csak a munkaterület. `y` = minden korábbi commit is. Első bevezetéskor egyszer hasznos, utána zajos. |
+| Add a NuGetAuthenticate task for a private feed? | **igen**, ha a projekt privát Azure Artifacts NuGet feedet használ |
+| Relative path of the private npm .npmrc | üres, ha nincs privát npm feed |
 
 ### Lokális beállítás és befejezés
 
-- **Lokális Sonar URL felülírás?** Csak akkor `igen`, ha a saját gépeden egy másik (pl. helyi)
+- **Override the Sonar URL locally?** Csak akkor `y`, ha a saját gépeden egy másik (pl. helyi)
   Sonart használsz. Ez a gitignore-olt `.security/security.config.local.json`-ba kerül, a
   commitolt configot nem érinti.
-- **Telepítés után teljes Report vizsgálat fusson?** Első telepítésnél hasznos próbának, de a Sonar
+- **Run a full Report scan after the installation?** Első telepítésnél hasznos próbának, de a Sonar
   feltöltés ilyenkor nem fut (ahhoz `--include-sonar` és a saját **user tokened** kell a `SONAR_TOKEN`-ben,
   ld. [2.2](02-sonar-es-mssql.md#személyes-user-token-helyi-futtatáshoz)).
 
 ### Mit csinál a telepítő
 
-1. Kiírja a `.security/` mappát: config, lock, PS-scriptek, `gitleaks.toml`, `SecurityToolkit.props`.
+1. Kiírja a `.security/` mappát: config, lock, `gitleaks.toml`, `SecurityToolkit.props`.
 2. Managed blokkokat ír (`# BEGIN SECURITY-TOOLKIT` … `# END SECURITY-TOOLKIT` jelölők közé; a
    blokkon kívüli tartalomhoz nem nyúl):
    - `.gitignore`: a futásidejű fájlok kizárása;

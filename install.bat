@@ -3,15 +3,15 @@ setlocal enabledelayedexpansion
 
 net session >nul 2>&1
 if errorlevel 1 (
-    echo Ez a telepito rendszerszinten telepit, minden felhasznalo/szolgaltatas-fiok szamara,
-    echo ezert rendszergazdai jogosultsag kell hozza. Inditsd ujra rendszergazdakent.
+    echo This installer installs machine-wide, for every user and service account,
+    echo so it needs administrator rights. Run it again as administrator.
     exit /b 1
 )
 
-echo Publikalas: dotnet publish src\SecurityToolkit.Cli -r win-x64 -p:SelfContained=true ...
+echo Publishing: dotnet publish src\SecurityToolkit.Cli -r win-x64 -p:SelfContained=true ...
 dotnet publish src\SecurityToolkit.Cli -c Release -r win-x64 -p:SelfContained=true
 if errorlevel 1 (
-    echo Publikalas sikertelen, telepites megszakitva.
+    echo Publish failed, installation aborted.
     exit /b 1
 )
 
@@ -20,10 +20,10 @@ if not exist "%TARGET%" mkdir "%TARGET%"
 
 copy /Y "src\SecurityToolkit.Cli\bin\Release\net11.0\win-x64\publish\security-toolkit.exe" "%TARGET%\security-toolkit.exe" >nul
 if errorlevel 1 (
-    echo Masolas sikertelen: %TARGET%\security-toolkit.exe
+    echo Copy failed: %TARGET%\security-toolkit.exe
     exit /b 1
 )
-echo Telepitve: %TARGET%\security-toolkit.exe
+echo Installed: %TARGET%\security-toolkit.exe
 
 set "SYSTEMPATH="
 for /f "usebackq tokens=2,*" %%A in (`reg query "HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Environment" /v PATH 2^>nul`) do set "SYSTEMPATH=%%B"
@@ -36,20 +36,20 @@ if errorlevel 1 (
         setx PATH "%TARGET%" /M >nul
     )
     if errorlevel 1 (
-        echo PATH frissites sikertelen. Ellenorizd, hogy a rendszerszintu PATH nem lepi-e tul
-        echo a setx 1024 karakteres korlatjat - ha igen, a PATH-ot kezzel, a Rendszerbeallitasok
-        echo Kornyezeti valtozok parbeszedeben kell bovitened.
+        echo Updating PATH failed. Check whether the system PATH exceeds setx's 1024-character
+        echo limit - if it does, extend PATH by hand in System Properties,
+        echo Environment Variables.
         exit /b 1
     )
-    echo PATH frissitve rendszerszinten. Minden mar futo folyamatnak ujra kell indulnia,
-    echo hogy a valtozas ervenybe lepjen: nyiss uj terminalt, es inditsd ujra minden
-    echo Windows szolgaltatast is, peldaul az Azure DevOps agent szolgaltatasat.
+    echo System PATH updated. Every process that is already running has to be restarted
+    echo for the change to take effect: open a new terminal, and restart every Windows
+    echo service as well, for example the Azure DevOps agent service.
 ) else (
-    echo A rendszerszintu PATH mar tartalmazza: %TARGET%
+    echo The system PATH already contains: %TARGET%
 )
 
-rem --- Gepi szintu, projektfuggetlen infrastruktura (opcionalis) ---
-rem Kapcsolok: --sonar, --mssql (felugyelet nelkul), --no-infra (kihagyas). Kapcsolo nelkul kerdez.
+rem --- Machine-level, project-independent infrastructure (optional) ---
+rem Switches: --sonar, --mssql (unattended), --no-infra (skip). Without a switch it asks.
 set "INFRA_ARGS="
 set "ASK_INFRA=1"
 for %%A in (%*) do (
@@ -60,23 +60,23 @@ for %%A in (%*) do (
 
 if "%ASK_INFRA%"=="1" (
     echo.
-    echo Gepi szintu infrastruktura (Docker Desktop kell hozza; fejlesztoi gepen altalaban kihagyhato^):
-    choice /C IN /N /M "Kozos SonarQube + PostgreSQL telepitese/frissitese ezen a gepen? [I/N] "
+    echo Machine-level infrastructure (needs Docker Desktop; usually skipped on a developer machine^):
+    choice /C YN /N /M "Install/update the shared SonarQube + PostgreSQL on this machine? [Y/N] "
     if !errorlevel! EQU 1 set "INFRA_ARGS=!INFRA_ARGS! --sonar"
-    choice /C IN /N /M "Kozos teszt-SQL Server (MSSQL) telepitese/frissitese ezen a gepen? [I/N] "
+    choice /C YN /N /M "Install/update the shared test SQL Server (MSSQL) on this machine? [Y/N] "
     if !errorlevel! EQU 1 set "INFRA_ARGS=!INFRA_ARGS! --mssql"
 )
 
 if defined INFRA_ARGS (
     echo.
-    echo Infrastruktura: security-toolkit infra install!INFRA_ARGS!
+    echo Infrastructure: security-toolkit infra install!INFRA_ARGS!
     "%TARGET%\security-toolkit.exe" infra install!INFRA_ARGS!
     if errorlevel 1 (
-        echo Az infrastruktura telepitese sikertelen, lasd a fenti uzeneteket. A CLI telepitese ettol meg ervenyes.
+        echo Installing the infrastructure failed, see the messages above. The CLI installation is still valid.
         exit /b 2
     )
 )
 
 echo.
-echo Kesz. Uj terminalbol (vagy ujrainditott szolgaltatasbol): security-toolkit --help
+echo Done. From a new terminal (or a restarted service): security-toolkit --help
 endlocal

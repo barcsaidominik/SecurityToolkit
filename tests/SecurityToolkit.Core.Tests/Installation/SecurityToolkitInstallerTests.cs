@@ -184,7 +184,7 @@ public class SecurityToolkitInstallerTests : IDisposable
 
         var outcome = await installer.InstallAsync(options, configProfile: null, toolProvisioner: null);
 
-        Assert.Contains(outcome.Messages, m => m.Contains("Régi, projekt-specifikus Sonar Docker stack", StringComparison.Ordinal));
+        Assert.Contains(outcome.Messages, m => m.Contains("An old, project-specific Sonar Docker stack", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -195,7 +195,7 @@ public class SecurityToolkitInstallerTests : IDisposable
 
         var outcome = await installer.InstallAsync(options, configProfile: null, toolProvisioner: null);
 
-        Assert.DoesNotContain(outcome.Messages, m => m.Contains("Régi, projekt-specifikus Sonar Docker stack", StringComparison.Ordinal));
+        Assert.DoesNotContain(outcome.Messages, m => m.Contains("An old, project-specific Sonar Docker stack", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -518,7 +518,7 @@ public class SecurityToolkitInstallerTests : IDisposable
         var outcome = await installer.InstallAsync(options, configProfile: null, toolProvisioner: null);
 
         Assert.Equal(0, outcome.ExitCode);
-        Assert.Contains(outcome.Messages, m => m.Contains("Kihagyva", StringComparison.Ordinal) && m.Contains("SecurityToolkit.props", StringComparison.Ordinal));
+        Assert.Contains(outcome.Messages, m => m.Contains("Skipped (manual change detected)", StringComparison.Ordinal) && m.Contains("SecurityToolkit.props", StringComparison.Ordinal));
         Assert.Equal("# manually hacked\n", File.ReadAllText(runnerPath));
         // Every other owned template still gets (re)written normally in the same run.
         Assert.True(File.Exists(Path.Combine(_root, ".security", "gitleaks.toml")));
@@ -663,7 +663,7 @@ public class SecurityToolkitInstallerTests : IDisposable
             Assert.False(File.Exists(Path.Combine(_root, ".security", name)), name);
         }
 
-        Assert.Contains(outcome.Messages, m => m.Contains("Kivezetett toolkit-fájlok törölve", StringComparison.Ordinal));
+        Assert.Contains(outcome.Messages, m => m.Contains("Retired toolkit files deleted", StringComparison.Ordinal));
         var state = File.ReadAllText(Path.Combine(_root, ".security", "install-state.json"));
         Assert.DoesNotContain("Toolkit.Common.ps1", state, StringComparison.Ordinal);
 
@@ -686,7 +686,7 @@ public class SecurityToolkitInstallerTests : IDisposable
 
         Assert.Equal("# my own changes\n", File.ReadAllText(edited));
         Assert.False(File.Exists(Path.Combine(_root, ".security", "Toolkit.Common.ps1")));
-        Assert.Contains(outcome.Messages, m => m.Contains("kézzel módosítva", StringComparison.Ordinal)
+        Assert.Contains(outcome.Messages, m => m.Contains("changed by hand", StringComparison.Ordinal)
             && m.Contains(".security/Restore-SecurityToolkit.ps1", StringComparison.Ordinal));
     }
 
@@ -866,7 +866,7 @@ public class SecurityToolkitInstallerTests : IDisposable
 
         Assert.Equal(0, outcome.ExitCode);
         Assert.True(File.Exists(Path.Combine(_root, "azure-security-toolkit.yml")));
-        Assert.Contains(outcome.Messages, m => m.Contains("azure-security-toolkit.yml már nem frissül", StringComparison.Ordinal));
+        Assert.Contains(outcome.Messages, m => m.Contains("azure-security-toolkit.yml is no longer updated", StringComparison.Ordinal));
     }
 
     private static Dictionary<string, object?> ReleaseProfile(string version = "1.2.0", params string[] providers) => new()
@@ -962,7 +962,7 @@ public class SecurityToolkitInstallerTests : IDisposable
 
         Assert.Equal(0, outcome.ExitCode);
         Assert.Empty(handler.RequestedUris);
-        Assert.Contains(outcome.Messages, m => m.Contains("checksumjai még nincsenek rögzítve", StringComparison.Ordinal));
+        Assert.Contains(outcome.Messages, m => m.Contains("are not pinned yet", StringComparison.Ordinal));
         var azure = File.ReadAllText(Path.Combine(_root, "azure-security-toolkit.yml")).Replace("\r\n", "\n");
         Assert.Contains("is not pinned in .security/security.lock.json: run a full install first.\n    exit 2\n", azure);
         Assert.DoesNotContain("curl", azure);

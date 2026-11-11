@@ -114,17 +114,17 @@ public static class InstallCommandFactory
                 if (globalExists)
                 {
                     runGlobalWizard = prompts.ReadYesNo(
-                        "Meglévő globális konfiguráció található — újrafuttassam a varázslót rá?", defaultValue: false);
+                        "An existing shared configuration was found. Run the wizard on it again?", defaultValue: false);
                 }
 
                 if (localExists)
                 {
                     runLocalWizard = prompts.ReadYesNo(
-                        "Meglévő lokális (gépspecifikus) konfiguráció található — újrafuttassam a varázslót rá?", defaultValue: false);
+                        "An existing local (machine-specific) configuration was found. Run the wizard on it again?", defaultValue: false);
                 }
                 else if (!globalExists)
                 {
-                    Console.WriteLine("Nincs meglévő konfiguráció — teljes varázsló indul (globális + lokális).");
+                    Console.WriteLine("No existing configuration: running the full wizard (shared + local).");
                 }
             }
 
@@ -141,8 +141,8 @@ public static class InstallCommandFactory
             // target selection, and Core stays untouched by any of this.
             if (interactive && (runGlobalWizard || runLocalWizard))
             {
-                Console.WriteLine("Security Toolkit - eszközválasztás és projektszintű telepítés");
-                Console.WriteLine("Meglévő feedek, deploy pipeline-ok és alkalmazásjelszavak nem kerülnek átírásra.");
+                Console.WriteLine("Security Toolkit - tool selection and project installation");
+                Console.WriteLine("Existing feeds, deploy pipelines and application passwords are never rewritten.");
 
                 var root = Path.GetFullPath(options.ProjectRoot);
                 var (scan, resolved) = SecurityToolkitInstaller.ResolveConfig(root, configProfile, options.SemgrepScope);
@@ -150,18 +150,18 @@ public static class InstallCommandFactory
                 if (runGlobalWizard)
                 {
                     Console.WriteLine();
-                    Console.WriteLine("=== GLOBÁLIS konfiguráció (commitolt: security.config.json) ===");
+                    Console.WriteLine("=== SHARED configuration (committed: security.config.json) ===");
                 }
 
                 Console.WriteLine();
-                Console.WriteLine("--- Célok ---");
+                Console.WriteLine("--- Targets ---");
                 resolved["dotnetTargets"] = targetSelector(
-                    ".NET solution/projekt célok", scan.SolutionRelativePaths,
+                    ".NET solution/project targets", scan.SolutionRelativePaths,
                     ScannerSupport.GetList(resolved, "dotnetTargets")
                         .Select(v => v as string ?? string.Empty).Where(v => v.Length > 0).ToList())
                     .Cast<object?>().ToList();
                 resolved["frontendTargets"] = targetSelector(
-                    "Frontend/npm célkönyvtárak", scan.FrontendRelativeDirectories,
+                    "Frontend/npm target directories", scan.FrontendRelativeDirectories,
                     ScannerSupport.GetList(resolved, "frontendTargets")
                         .Select(v => v as string ?? string.Empty).Where(v => v.Length > 0).ToList())
                     .Cast<object?>().ToList();
@@ -174,17 +174,17 @@ public static class InstallCommandFactory
                 if (runLocalWizard)
                 {
                     Console.WriteLine();
-                    Console.WriteLine("=== LOKÁLIS konfiguráció (gépspecifikus, gitignore-olt: security.config.local.json) ===");
+                    Console.WriteLine("=== LOCAL configuration (machine-specific, gitignored: security.config.local.json) ===");
 
                     var resolvedTools = ScannerSupport.GetDictionary(resolved, "tools");
                     var sonarToolEnabled = resolvedTools is not null && ScannerSupport.GetBool(resolvedTools, "sonar");
                     var wantsLocal = sonarToolEnabled
                         && prompts.ReadYesNo(
-                            "Kérsz lokális Sonar URL felülírást (pl. az ezen a gépen futó, infra install-lal telepített Sonarhoz)?",
+                            "Override the Sonar URL locally (e.g. for the Sonar installed on this machine with infra install)?",
                             defaultValue: false);
                     if (wantsLocal)
                     {
-                        var localUrl = prompts.ReadValue("Lokális Sonar URL", "http://127.0.0.1:9000");
+                        var localUrl = prompts.ReadValue("Local Sonar URL", "http://127.0.0.1:9000");
                         var localOverrideToWrite = new Dictionary<string, object?>
                         {
                             ["sonar"] = new Dictionary<string, object?> { ["url"] = localUrl },
@@ -200,7 +200,7 @@ public static class InstallCommandFactory
                 options = options with { NonInteractive = true };
 
                 Console.WriteLine();
-                var runAfterInstall = prompts.ReadYesNo("Telepítés után teljes Report vizsgálat fusson?", options.RunAfterInstall);
+                var runAfterInstall = prompts.ReadYesNo("Run a full Report scan after the installation?", options.RunAfterInstall);
                 options = options with { RunAfterInstall = runAfterInstall };
 
                 // Target selection already happened above; InstallAsync must not prompt again.
@@ -226,18 +226,18 @@ public static class InstallCommandFactory
                 var drifted = entries.Where(e => e.Status != DriftStatus.Unchanged).ToList();
                 if (drifted.Count == 0)
                 {
-                    Console.WriteLine("In sync: minden managed fájl megegyezik a jelenlegi toolkit forrással.");
+                    Console.WriteLine("In sync: every managed file matches the current toolkit source.");
                     return 0;
                 }
 
-                Console.WriteLine($"Drift: {drifted.Count} fájl tér el a jelenlegi toolkit forrástól.");
+                Console.WriteLine($"Drift: {drifted.Count} file(s) differ from the current toolkit source.");
                 return 1;
             }
 
-            Console.WriteLine($"Projekt konfiguráció: {Path.Combine(Path.GetFullPath(options.ProjectRoot), ".security")}");
+            Console.WriteLine($"Project configuration: {Path.Combine(Path.GetFullPath(options.ProjectRoot), ".security")}");
             if (outcome.ManifestPath is not null)
             {
-                Console.WriteLine($"Visszaállítás manifest: {outcome.ManifestPath}");
+                Console.WriteLine($"Restore manifest: {outcome.ManifestPath}");
             }
 
             return outcome.ExitCode;

@@ -132,7 +132,7 @@ public sealed class InfraInstaller
             }
             catch (UnauthorizedAccessException ex)
             {
-                messages.Add($"{name}: {ex.Message} A gépi infra rendszergazdai jogot kér (Windows: rendszergazdai terminál, Linux: sudo).");
+                messages.Add($"{name}: {ex.Message} The machine-level infra needs administrator rights (Windows: an elevated terminal, Linux: sudo).");
                 exitCode = 2;
             }
         }
@@ -200,10 +200,10 @@ public sealed class InfraInstaller
         if (_readMaxMapCount() is { } maxMapCount && maxMapCount < RequiredMaxMapCount)
         {
             throw new InvalidOperationException(
-                $"vm.max_map_count = {maxMapCount}, a SonarQube (Elasticsearch) legalább {RequiredMaxMapCount}-et kér, különben nem indul el. " +
-                $"Beállítás: sudo sysctl -w vm.max_map_count={RequiredMaxMapCount}, tartósan: " +
+                $"vm.max_map_count = {maxMapCount}, but SonarQube (Elasticsearch) needs at least {RequiredMaxMapCount}, otherwise it does not start. " +
+                $"Set it with: sudo sysctl -w vm.max_map_count={RequiredMaxMapCount}, permanently: " +
                 $"echo 'vm.max_map_count={RequiredMaxMapCount}' | sudo tee /etc/sysctl.d/99-security-toolkit-sonar.conf. " +
-                "Utána futtasd újra az infra telepítését.");
+                "Then run the infra installation again.");
         }
 
         Directory.CreateDirectory(SonarDirectory);
@@ -224,16 +224,16 @@ public sealed class InfraInstaller
             // the move never doubles as an unplanned Sonar version upgrade.
             env = ReadEnv(Path.Combine(_legacySonarDirectory, ".env"));
             messages.Add(
-                $"Sonar: a korábbi beállítások (DB-jelszó, port, image-ek) átvéve innen: {_legacySonarDirectory}. " +
-                "Ha a Sonar az új helyről rendben fut, ez a mappa törölhető.");
+                $"Sonar: the earlier settings (DB password, port, images) were taken over from {_legacySonarDirectory}. " +
+                "Once Sonar runs fine from the new location, that folder can be deleted.");
         }
         else if (await VolumeExistsAsync($"{SonarComposeProject}_postgres_data", cancellationToken).ConfigureAwait(false))
         {
             throw new InvalidOperationException(
-                $"A {SonarComposeProject}_postgres_data volume már létezik, de a hozzá tartozó .env nem található " +
-                $"(sem itt: {envPath}, sem a régi helyen: {_legacySonarDirectory}). Új jelszóval a Sonar nem érné el " +
-                "a meglévő adatbázisát: másold ide a régi .env-et (SONAR_DB_PASSWORD), vagy ha az adat eldobható, " +
-                $"töröld a volume-ot (docker volume rm {SonarComposeProject}_postgres_data).");
+                $"The {SonarComposeProject}_postgres_data volume already exists, but its .env was not found " +
+                $"(neither at {envPath} nor at the old location {_legacySonarDirectory}). With a new password Sonar could not reach " +
+                "its existing database: copy the old .env here (SONAR_DB_PASSWORD), or if the data can be discarded, " +
+                $"delete the volume (docker volume rm {SonarComposeProject}_postgres_data).");
         }
         else
         {
@@ -255,7 +255,7 @@ public sealed class InfraInstaller
 
         await WriteEnvAsync(envPath, env, restrict: isNew, cancellationToken).ConfigureAwait(false);
         await UpAsync(SonarDirectory, cancellationToken).ConfigureAwait(false);
-        messages.Add($"Sonar: fut (http://localhost:{env["SONAR_PORT"]}), fájlok: {SonarDirectory}");
+        messages.Add($"Sonar: running (http://localhost:{env["SONAR_PORT"]}), files: {SonarDirectory}");
     }
 
     private async Task InstallMssqlAsync(InfraInstallOptions options, List<string> messages, CancellationToken cancellationToken)
@@ -282,8 +282,8 @@ public sealed class InfraInstaller
         await WriteEnvAsync(envPath, env, restrict: isNew, cancellationToken).ConfigureAwait(false);
         await UpAsync(MssqlDirectory, cancellationToken).ConfigureAwait(false);
         messages.Add(
-            $"MSSQL: fut (127.0.0.1,{env["MSSQL_PORT"]}), fájlok: {MssqlDirectory}. " +
-            "Projektenkénti felhasználó: security-toolkit infra add-test-login <név>");
+            $"MSSQL: running (127.0.0.1,{env["MSSQL_PORT"]}), files: {MssqlDirectory}. " +
+            "Per-project login: security-toolkit infra add-test-login <name>");
     }
 
     /// <summary>Keeps an existing digest pin unless upgrading; otherwise pulls the source tag and pins its digest.</summary>

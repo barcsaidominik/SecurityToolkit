@@ -123,7 +123,7 @@ public static class FindingBaseline
             {
                 if (group.Any(r => r.Status == ScanStatus.Failed))
                 {
-                    notes.Add($"Baseline: {group.Key} nem frissült (a futás nem listázta a találatait), a korábbi bejegyzés marad.");
+                    notes.Add($"Baseline: {group.Key} not updated (the run did not list its findings); the previous entry stays.");
                 }
 
                 continue;
@@ -136,7 +136,7 @@ public static class FindingBaseline
             }
 
             tools[group.Key] = counts;
-            notes.Add($"Baseline: {group.Key} → {counts.Values.Sum(v => (long)v!)} elfogadott találat.");
+            notes.Add($"Baseline: {group.Key} → {counts.Values.Sum(v => (long)v!)} accepted finding(s).");
         }
 
         Directory.CreateDirectory(securityDirectory);

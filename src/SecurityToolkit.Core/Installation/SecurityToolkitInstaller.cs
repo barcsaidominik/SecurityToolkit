@@ -152,10 +152,10 @@ public sealed class SecurityToolkitInstaller
         // validation below. NonInteractivePrompts/the default selector just keep the existing
         // selection (or every discovered candidate) untouched.
         config["dotnetTargets"] = targetSelector(
-            ".NET solution/projekt célok", scan.SolutionRelativePaths, GetStringList(config, "dotnetTargets"))
+            ".NET solution/project targets", scan.SolutionRelativePaths, GetStringList(config, "dotnetTargets"))
             .Cast<object?>().ToList();
         config["frontendTargets"] = targetSelector(
-            "Frontend/npm célkönyvtárak", scan.FrontendRelativeDirectories, GetStringList(config, "frontendTargets"))
+            "Frontend/npm target directories", scan.FrontendRelativeDirectories, GetStringList(config, "frontendTargets"))
             .Cast<object?>().ToList();
 
         // Validation failures are expected, user-fixable configuration errors (bad Sonar
@@ -175,7 +175,7 @@ public sealed class SecurityToolkitInstaller
 
         if (options.DryRun)
         {
-            return new InstallOutcome(0, new[] { "DryRun: nincs fájlírás, letöltés, csomagtelepítés vagy git-beállítás." }, null, config);
+            return new InstallOutcome(0, new[] { "DryRun: no file writes, downloads, package installs or git settings." }, null, config);
         }
 
         if (!options.CheckOnly)
@@ -236,10 +236,10 @@ public sealed class SecurityToolkitInstaller
             if (File.Exists(legacySonarComposePath))
             {
                 messages.Add(
-                    "Régi, projekt-specifikus Sonar Docker stack található (.security/sonar/compose.yml). " +
-                    "A Sonar mostantól közös, megosztott szerveren fut. Ha a régi stack-re nincs többé " +
-                    "szükség: docker compose -f .security/sonar/compose.yml --env-file .security/sonar/.env " +
-                    "down -v, majd törölheted a .security/sonar/ mappát.");
+                    "An old, project-specific Sonar Docker stack was found (.security/sonar/compose.yml). " +
+                    "Sonar now runs on a shared server. If you no longer need the old stack: " +
+                    "docker compose -f .security/sonar/compose.yml --env-file .security/sonar/.env " +
+                    "down -v, then delete the .security/sonar/ folder.");
             }
 
             var legacyExecutablePath = Path.Combine(
@@ -247,9 +247,9 @@ public sealed class SecurityToolkitInstaller
             if (File.Exists(legacyExecutablePath))
             {
                 messages.Add(
-                    "Régi, projekt-specifikus security-toolkit másolat található (.security/bin/). " +
-                    "A git hook mostantól a PATH-ról futtatott, közös telepítést használja (lásd install.bat / install.sh " +
-                    "a SecurityToolkit forrás-repóban) — a .security/bin/ másolatra nincs többé szükség, kézzel törölhető.");
+                    "An old, project-specific security-toolkit copy was found (.security/bin/). " +
+                    "The git hook now uses the shared installation on PATH (see install.bat / install.sh " +
+                    "in the SecurityToolkit source repository); the .security/bin/ copy is no longer needed and can be deleted by hand.");
             }
 
             if (settings.InstallHook && dependencies.GitHookInstaller is not null)
@@ -264,9 +264,9 @@ public sealed class SecurityToolkitInstaller
                 if (!dependencies.GitHookInstaller.IsExecutableOnPath())
                 {
                     messages.Add(
-                        "A 'security-toolkit' parancs nem található a PATH-on. A git hook ezt hívja majd — " +
-                        "futtasd az install.bat-ot (Windows) vagy az install.sh-t (Linux) a SecurityToolkit forrás-repóban, majd nyiss új terminált, " +
-                        "hogy a hook működjön.");
+                        "The 'security-toolkit' command is not on PATH, but the git hook calls it: " +
+                        "run install.bat (Windows) or install.sh (Linux) in the SecurityToolkit source repository, then open a new terminal " +
+                        "so the hook works.");
                 }
             }
 
@@ -315,26 +315,26 @@ public sealed class SecurityToolkitInstaller
             }
             else
             {
-                messages.Add("ConfigureOnly: a CLI/image telepítés és a gyártói szabályletöltés még nem történt meg. Futtasd újra ConfigureOnly nélkül.");
+                messages.Add("ConfigureOnly: the CLI/image installation and the vendor rule download have not happened yet. Run again without --configure-only.");
             }
 
             if (settings.IsToolEnabled("sonar"))
             {
-                messages.Add("Sonar: admin belépés/jelszócsere, private projekt és project analysis token létrehozása szükséges. Token csak SONAR_TOKEN environment változóból. Feltöltés: security-toolkit scan --include-sonar. A közös Sonar-szervert gépenként egyszer az install.bat / install.sh (security-toolkit infra install --sonar) telepíti, a projekt-install nem indítja.");
+                messages.Add("Sonar: log in as admin and change the password, then create a private project and a project analysis token. The token is read only from the SONAR_TOKEN environment variable. Upload: security-toolkit scan --include-sonar. The shared Sonar server is installed once per machine by install.bat / install.sh (security-toolkit infra install --sonar); the project install does not start it.");
             }
 
             if (settings.GeneratePipeline)
             {
                 if (settings.HasPipelineProvider("azure"))
                 {
-                    messages.Add("Azure: pool/repo/feed jogosultságok és a generált YAML-hoz pipeline létrehozása szükséges; a telepítő nem csatlakozik Azure-hoz.");
+                    messages.Add("Azure: grant the pool/repo/feed permissions and create a pipeline for the generated YAML; the installer does not connect to Azure.");
                 }
 
                 if (settings.HasPipelineProvider("github"))
                 {
                     messages.Add(
-                        $"GitHub: a {GitHubWorkflowRelativePath} egy self-hosted runnert vár (githubRunsOn címkék), amin a security-toolkit a PATH-on van; " +
-                        "a SONAR_TOKEN-t (és a sonar.testEnvironment secretjeit) a repó Actions secretjei közé kell felvenni. A telepítő nem csatlakozik GitHubhoz.");
+                        $"GitHub: {GitHubWorkflowRelativePath} expects a self-hosted runner (githubRunsOn labels) with security-toolkit on PATH; " +
+                        "add SONAR_TOKEN (and the sonar.testEnvironment secrets) to the repository's Actions secrets. The installer does not connect to GitHub.");
                 }
             }
         }
@@ -350,15 +350,15 @@ public sealed class SecurityToolkitInstaller
                 foreach (var relative in backup.SkippedOwnedFiles)
                 {
                     messages.Add(
-                        $"Kihagyva (kézi módosítás észlelve): {relative}. A fájl változatlan maradt; a telepítés " +
-                        "többi lépése lefutott. Ha a toolkit generált verzióját szeretnéd vissza, töröld/mentsd el " +
-                        "a kézi módosítást, majd futtasd újra az installt.");
+                        $"Skipped (manual change detected): {relative}. The file was left unchanged; the rest of the " +
+                        "installation ran. To get the toolkit's generated version back, delete or save away " +
+                        "the manual change, then run the install again.");
                 }
 
                 backup.Finish();
                 ToolkitFile.WriteAllText(
                     Path.Combine(securityDirectory, "pending-actions.md"),
-                    "# Telepítés után fennmaradó lépések\n\n" + string.Join("\n\n", messages) + "\n");
+                    "# Remaining steps after installation\n\n" + string.Join("\n\n", messages) + "\n");
             }
         }
 
@@ -445,15 +445,15 @@ public sealed class SecurityToolkitInstaller
         if (deleted.Count > 0)
         {
             messages.Add(
-                "Kivezetett toolkit-fájlok törölve (a CLI váltja ki őket, a törlés restore-ral visszavonható): " +
-                string.Join(", ", deleted) + ". A törlést commitold.");
+                "Retired toolkit files deleted (the CLI replaces them; restore undoes the deletion): " +
+                string.Join(", ", deleted) + ". Commit the deletion.");
         }
 
         foreach (var relative in backup.KeptRetiredFiles)
         {
             messages.Add(
-                $"Kivezetett toolkit-fájl, de kézzel módosítva, ezért nem töröltem: {relative}. A toolkit már nem " +
-                "használja; ha nincs rá szükséged, töröld kézzel.");
+                $"Retired toolkit file left in place because it was changed by hand: {relative}. The toolkit no longer " +
+                "uses it; delete it by hand if you don't need it.");
         }
     }
 

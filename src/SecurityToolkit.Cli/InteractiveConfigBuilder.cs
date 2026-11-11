@@ -14,14 +14,14 @@ public static class InteractiveConfigBuilder
 {
     private static readonly (string Key, string Label)[] ToolQuestions =
     {
-        ("analyzers", ".NET security analyzers (C# build/IDE szabályok)"),
-        ("semgrep", "Semgrep CE (C# és JS/TS statikus kódellenőrzés)"),
-        ("gitleaks", "Gitleaks (fájlok, staged változások és history titokkeresés)"),
-        ("nuget", "NuGet Audit (ismert .NET csomagsérülékenységek)"),
-        ("npm", "npm audit (npm lockfile csomagsérülékenységek)"),
-        ("osv", "OSV-Scanner (kiegészítő SCA vélemény)"),
-        ("devskim", "DevSkim (kiegészítő security linting)"),
-        ("sonar", "SonarScanner for .NET (Sonar szerverhez feltöltés, token később)"),
+        ("analyzers", ".NET security analyzers (C# build/IDE rules)"),
+        ("semgrep", "Semgrep CE (C# and JS/TS static analysis)"),
+        ("gitleaks", "Gitleaks (secret scanning of files, staged changes and history)"),
+        ("nuget", "NuGet Audit (known .NET package vulnerabilities)"),
+        ("npm", "npm audit (npm lockfile package vulnerabilities)"),
+        ("osv", "OSV-Scanner (second SCA opinion)"),
+        ("devskim", "DevSkim (additional security linting)"),
+        ("sonar", "SonarScanner for .NET (upload to a Sonar server, token later)"),
     };
 
     /// <summary>
@@ -38,10 +38,10 @@ public static class InteractiveConfigBuilder
             ?? throw new InvalidOperationException("config has no tools section.");
 
         Console.WriteLine();
-        Console.WriteLine("--- Eszközök ---");
+        Console.WriteLine("--- Tools ---");
         foreach (var (key, label) in ToolQuestions)
         {
-            tools[key] = prompts.ReadYesNo($"Telepítendő: {label}?", ScannerSupport.GetBool(tools, key));
+            tools[key] = prompts.ReadYesNo($"Enable {label}?", ScannerSupport.GetBool(tools, key));
         }
 
         var frontendTargets = ScannerSupport.GetList(config, "frontendTargets");
@@ -49,7 +49,7 @@ public static class InteractiveConfigBuilder
         if (ScannerSupport.GetBool(tools, "semgrep"))
         {
             var scope = prompts.ReadValue(
-                "Semgrep hatókör: repository=teljes repo; frontend=választott frontendek, C# nélkül (CE modern C# korlát)",
+                "Semgrep scope: repository=whole repo; frontend=selected frontends, without C# (CE limit on modern C#)",
                 ScannerSupport.GetString(config, "semgrepScope") ?? "repository");
             if (scope is not ("repository" or "frontend"))
             {
@@ -65,35 +65,35 @@ public static class InteractiveConfigBuilder
         }
 
         Console.WriteLine();
-        Console.WriteLine("--- Előfeltételek ---");
+        Console.WriteLine("--- Prerequisites ---");
         if (OperatingSystem.IsWindows())
         {
             config["installPrerequisites"] = prompts.ReadYesNo(
-                "Hiányzó rendszerfüggőségek telepítése Windows winget segítségével?", ScannerSupport.GetBool(config, "installPrerequisites"));
+                "Install missing system dependencies with winget?", ScannerSupport.GetBool(config, "installPrerequisites"));
         }
         else
         {
             // winget is Windows-only; on Linux the installer only reports what is missing.
-            Console.WriteLine("Linuxon a hiányzó rendszerfüggőségeket (git, dotnet, node, docker) a disztribúció csomagkezelőjével kell telepíteni; a telepítő csak jelzi, mi hiányzik.");
+            Console.WriteLine("On Linux, install missing system dependencies (git, dotnet, node, docker) with the distribution's package manager; the installer only reports what is missing.");
             config["installPrerequisites"] = false;
         }
 
         if (ScannerSupport.GetBool(config, "installPrerequisites"))
         {
             config["sdkChannel"] = prompts.ReadValue(
-                ".NET SDK csatorna hiányzó SDK-hoz (8.0/9.0/10.0; global.json kompatibilitás)",
+                ".NET SDK channel for a missing SDK (8.0/9.0/10.0/11.0; must fit global.json)",
                 ScannerSupport.GetString(config, "sdkChannel") ?? "10.0");
             config["nodeWingetId"] = prompts.ReadValue(
-                "Node winget package ID (Angular kompatibilitást ellenőrizni kell)",
+                "Node winget package ID (check Angular compatibility)",
                 ScannerSupport.GetString(config, "nodeWingetId") ?? "OpenJS.NodeJS.LTS");
             config["nodeVersion"] = prompts.ReadValue(
-                "Node pontos winget verzió, üres=package aktuális verzió", ScannerSupport.GetString(config, "nodeVersion") ?? string.Empty);
+                "Exact Node winget version, empty=current package version", ScannerSupport.GetString(config, "nodeVersion") ?? string.Empty);
         }
 
         if (ScannerSupport.GetBool(tools, "semgrep"))
         {
             config["downloadSemgrepRules"] = prompts.ReadYesNo(
-                "Gyártói Semgrep registry szabályok letöltése és helyi rögzítése?", ScannerSupport.GetBool(config, "downloadSemgrepRules"));
+                "Download the vendor Semgrep registry rules and pin them locally?", ScannerSupport.GetBool(config, "downloadSemgrepRules"));
         }
 
         if (ScannerSupport.GetBool(tools, "sonar"))
@@ -106,9 +106,9 @@ public static class InteractiveConfigBuilder
             // The Sonar server itself is shared machine-level infra (install.bat / install.sh /
             // `security-toolkit infra install --sonar`); a project only points at it.
             var url = prompts.ReadValue(
-                "Sonar URL (közös szerver; ezen a gépen telepítettnél http://localhost:9000)",
+                "Sonar URL (shared server; http://localhost:9000 for one installed on this machine)",
                 ScannerSupport.GetString(sonar, "url") ?? "http://localhost:9000");
-            var projectKey = prompts.ReadValue("Sonar projektkulcs (más projektekhez külön kulcs)", ScannerSupport.GetString(sonar, "projectKey") ?? string.Empty);
+            var projectKey = prompts.ReadValue("Sonar project key (a separate key per project)", ScannerSupport.GetString(sonar, "projectKey") ?? string.Empty);
 
             sonar["url"] = url;
             sonar["projectKey"] = projectKey;
@@ -121,7 +121,7 @@ public static class InteractiveConfigBuilder
 
             var existingSonarTarget = ScannerSupport.GetString(sonar, "dotnetTarget");
             var picked = prompts.SelectTargets(
-                "Egyetlen Sonar .NET target (több target esetén első lesz)", dotnetTargets,
+                "Single Sonar .NET target (with several, the first one is used)", dotnetTargets,
                 string.IsNullOrEmpty(existingSonarTarget) ? Array.Empty<string>() : new[] { existingSonarTarget });
             if (picked.Count == 0)
             {
@@ -131,11 +131,11 @@ public static class InteractiveConfigBuilder
             sonar["dotnetTarget"] = picked[0];
 
             sonar["coverage"] = prompts.ReadYesNo(
-                "Teszt-coverage mérése és feltöltése a Sonarba (dotnet test + ng test)?", ScannerSupport.GetBool(sonar, "coverage"));
+                "Measure test coverage and upload it to Sonar (dotnet test + ng test)?", ScannerSupport.GetBool(sonar, "coverage"));
             if (ScannerSupport.GetBool(sonar, "coverage"))
             {
                 sonar["testFilter"] = prompts.ReadValue(
-                    "dotnet test --filter kifejezés, üres=minden teszt", ScannerSupport.GetString(sonar, "testFilter") ?? string.Empty);
+                    "dotnet test --filter expression, empty=all tests", ScannerSupport.GetString(sonar, "testFilter") ?? string.Empty);
                 sonar["testEnvironment"] = ReadTestEnvironment(prompts, ScannerSupport.GetDictionary(sonar, "testEnvironment"));
             }
         }
@@ -145,16 +145,16 @@ public static class InteractiveConfigBuilder
         if (ScannerSupport.GetBool(tools, "gitleaks"))
         {
             config["installHook"] = prompts.ReadYesNo(
-                "Gyors Gitleaks staged pre-commit hook telepítése?", ScannerSupport.GetBool(config, "installHook"));
+                "Install the fast Gitleaks staged pre-commit hook?", ScannerSupport.GetBool(config, "installHook"));
         }
 
         config["installVSCodeExtensions"] = prompts.ReadYesNo(
-            "Választott eszközök VS Code extensionjeinek telepítése?", ScannerSupport.GetBool(config, "installVSCodeExtensions"));
+            "Install the VS Code extensions of the selected tools?", ScannerSupport.GetBool(config, "installVSCodeExtensions"));
 
         Console.WriteLine();
         Console.WriteLine("--- CI pipeline (Azure DevOps / GitHub Actions) ---");
         config["generatePipeline"] = prompts.ReadYesNo(
-            "Külön manuális security pipeline előállítása?", ScannerSupport.GetBool(config, "generatePipeline"));
+            "Generate a separate, manually run security pipeline?", ScannerSupport.GetBool(config, "generatePipeline"));
 
         if (ScannerSupport.GetBool(config, "generatePipeline"))
         {
@@ -173,9 +173,9 @@ public static class InteractiveConfigBuilder
             config["pipelineProviders"] = providers;
 
             config["pipelineHistory"] = prompts.ReadYesNo(
-                "Gitleaks a teljes elérhető git history-t vizsgálja (-History)? (nem=csak working tree)", ScannerSupport.GetBool(config, "pipelineHistory"));
+                "Should Gitleaks scan the whole reachable git history (--history)? (no=working tree only)", ScannerSupport.GetBool(config, "pipelineHistory"));
             config["pipelineMode"] = prompts.ReadYesNo(
-                "A pipeline Gate módban fusson (blokkoló találatra piros lépés; .security/baseline.json mellett csak az új találatra)?",
+                "Run the pipeline in Gate mode (a blocking finding fails the step; with .security/baseline.json only new findings do)?",
                 ScannerSupport.GetString(config, "pipelineMode") == "Gate")
                 ? "Gate"
                 : "Report";
@@ -183,38 +183,38 @@ public static class InteractiveConfigBuilder
             if (ScannerSupport.GetDictionary(config, "toolkitRelease") is { } toolkitRelease)
             {
                 toolkitRelease["version"] = prompts.ReadValue(
-                    "Efemer/hosted agenthez: a pipeline töltse le a security-toolkit ezen release-verzióját (pl. 1.2.0), üres=a gépi PATH-on lévő CLI",
+                    "For ephemeral/hosted agents: security-toolkit release version the pipeline downloads (e.g. 1.2.0), empty=the CLI on the machine PATH",
                     ScannerSupport.GetString(toolkitRelease, "version") ?? string.Empty);
             }
 
             if (providers.Contains("azure"))
             {
                 config["azureVmImage"] = prompts.ReadValue(
-                    "Microsoft-hosted Azure image (pl. ubuntu-latest), üres=self-hosted pool",
+                    "Microsoft-hosted Azure image (e.g. ubuntu-latest), empty=self-hosted pool",
                     ScannerSupport.GetString(config, "azureVmImage") ?? string.Empty);
                 if (string.IsNullOrEmpty(ScannerSupport.GetString(config, "azureVmImage")))
                 {
-                    config["agentPool"] = prompts.ReadValue("Azure self-hosted agent pool neve", ScannerSupport.GetString(config, "agentPool") ?? "SecurityToolkit");
+                    config["agentPool"] = prompts.ReadValue("Azure self-hosted agent pool name", ScannerSupport.GetString(config, "agentPool") ?? "SecurityToolkit");
                 }
-                config["privateNuGet"] = prompts.ReadYesNo("NuGetAuthenticate task kell privát feedhez?", ScannerSupport.GetBool(config, "privateNuGet"));
+                config["privateNuGet"] = prompts.ReadYesNo("Add a NuGetAuthenticate task for a private feed?", ScannerSupport.GetBool(config, "privateNuGet"));
                 config["privateNpmRc"] = prompts.ReadValue(
-                    "Privát npm .npmrc relatív útvonala, üres=nem kell task", ScannerSupport.GetString(config, "privateNpmRc") ?? string.Empty);
+                    "Relative path of the private npm .npmrc, empty=no task", ScannerSupport.GetString(config, "privateNpmRc") ?? string.Empty);
             }
 
             if (providers.Contains("github"))
             {
                 var labels = prompts.ReadValue(
-                    "GitHub runner címkék vesszővel (runs-on)",
+                    "GitHub runner labels, comma-separated (runs-on)",
                     string.Join(",", ScannerSupport.GetList(config, "githubRunsOn").OfType<string>()));
                 config["githubRunsOn"] = labels
                     .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
                     .Cast<object?>()
                     .ToList();
                 config["githubCodeScanning"] = prompts.ReadYesNo(
-                    "SARIF feltöltése a GitHub Code Scanningbe? (privát repóban Advanced Security kell)",
+                    "Upload SARIF to GitHub code scanning? (a private repo needs Advanced Security)",
                     ScannerSupport.GetBool(config, "githubCodeScanning"));
                 config["githubSchedule"] = prompts.ReadValue(
-                    "Ütemezés cron-kifejezéssel (UTC), üres=csak kézi indítás",
+                    "Schedule as a cron expression (UTC), empty=manual runs only",
                     ScannerSupport.GetString(config, "githubSchedule") ?? string.Empty);
             }
         }
@@ -237,9 +237,9 @@ public static class InteractiveConfigBuilder
         var result = new Dictionary<string, object?>(StringComparer.Ordinal);
         if (existing is { Count: > 0 })
         {
-            Console.WriteLine("Meglévő teszt-környezeti leképezések: " +
+            Console.WriteLine("Existing test environment mappings: " +
                 string.Join(", ", existing.Select(e => $"{e.Key}={e.Value}")));
-            if (prompts.ReadYesNo("Megtartod ezeket?", true))
+            if (prompts.ReadYesNo("Keep them?", true))
             {
                 foreach (var (name, variable) in existing)
                 {
@@ -251,7 +251,7 @@ public static class InteractiveConfigBuilder
         while (true)
         {
             var entry = prompts.ReadValue(
-                "Teszt env-változó a pipeline-ban, ENV_NEV=PipelineValtozoNeve (pl. ConnectionStrings__Default=TestDbConnectionString), üres=kész",
+                "Test env var in the pipeline, ENV_NAME=PipelineVariableName (e.g. ConnectionStrings__Default=TestDbConnectionString), empty=done",
                 string.Empty).Trim();
             if (entry.Length == 0)
             {
@@ -261,7 +261,7 @@ public static class InteractiveConfigBuilder
             var separator = entry.IndexOf('=');
             if (separator <= 0 || separator == entry.Length - 1)
             {
-                Console.WriteLine("Formátum: ENV_NEV=PipelineValtozoNeve");
+                Console.WriteLine("Format: ENV_NAME=PipelineVariableName");
                 continue;
             }
 

@@ -139,8 +139,8 @@ public sealed class ScanOrchestrator
                 var known = baseline.TryGetValue(result.Tool, out var counts) ? counts : null;
                 var added = FindingBaseline.CountNew(result.Fingerprints, known);
                 var note = known is null
-                    ? $"Baseline: nincs bejegyzés erre az eszközre, mind a(z) {added} blokkoló találat újnak számít."
-                    : $"Baseline: {result.Fingerprints.Count - added} ismert, {added} új blokkoló találat.";
+                    ? $"Baseline: no entry for this tool, all {added} blocking finding(s) count as new."
+                    : $"Baseline: {result.Fingerprints.Count - added} known, {added} new blocking finding(s).";
                 return result with
                 {
                     Blocking = result.Blocking && added > 0,

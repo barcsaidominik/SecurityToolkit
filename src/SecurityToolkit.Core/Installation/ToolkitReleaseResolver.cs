@@ -47,14 +47,14 @@ public sealed class ToolkitReleaseResolver
             if (!response.IsSuccessStatusCode)
             {
                 throw new InvalidOperationException(
-                    $"A security-toolkit v{version} release checksum-fájlja nem érhető el ({(int)response.StatusCode}): {url}");
+                    $"The checksum file of the security-toolkit v{version} release is not available ({(int)response.StatusCode}): {url}");
             }
 
             content = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
         }
         catch (HttpRequestException ex)
         {
-            throw new InvalidOperationException($"A security-toolkit v{version} release checksum-fájlja nem tölthető le: {url} ({ex.Message})", ex);
+            throw new InvalidOperationException($"The checksum file of the security-toolkit v{version} release could not be downloaded: {url} ({ex.Message})", ex);
         }
 
         var byFile = new Dictionary<string, string>(StringComparer.Ordinal);
@@ -69,7 +69,7 @@ public sealed class ToolkitReleaseResolver
             var match = ChecksumLine.Match(line);
             if (!match.Success)
             {
-                throw new InvalidOperationException($"Hibás sor a {ChecksumFileName} fájlban: {line}");
+                throw new InvalidOperationException($"Invalid line in {ChecksumFileName}: {line}");
             }
 
             byFile[match.Groups[2].Value] = match.Groups[1].Value.ToLowerInvariant();
@@ -80,7 +80,7 @@ public sealed class ToolkitReleaseResolver
         {
             if (!byFile.TryGetValue(asset, out var hash))
             {
-                throw new InvalidOperationException($"A {ChecksumFileName} nem tartalmazza ezt: {asset} (v{version}).");
+                throw new InvalidOperationException($"{ChecksumFileName} does not list {asset} (v{version}).");
             }
 
             result[rid] = hash;

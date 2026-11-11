@@ -61,8 +61,8 @@ public sealed class GitHookInstaller
         if (huskyDirectory is not null)
         {
             var huskyHook = Path.GetRelativePath(root, Path.Combine(huskyDirectory, "pre-commit")).Replace('\\', '/');
-            return "A git hookokat a Husky kezeli, ezért a toolkit nem telepít saját pre-commit hookot. " +
-                $"A titokkeresést a(z) {huskyHook} fájlba kell felvenni:\n  {StagedScanCommand}";
+            return "Husky manages the git hooks, so the toolkit does not install its own pre-commit hook. " +
+                $"Add the secret scan to {huskyHook}:\n  {StagedScanCommand}";
         }
 
         var existingText = File.Exists(hookPath) ? File.ReadAllText(hookPath) : string.Empty;

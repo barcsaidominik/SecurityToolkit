@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
-# A security-toolkit CLI gépi szintű telepítése Linuxra (az install.bat megfelelője).
+# Machine-wide installation of the security-toolkit CLI on Linux (the counterpart of install.bat).
 #   sudo bash install.sh [--sonar] [--mssql] [--no-infra]
-# A CLI ide kerül: /opt/security-toolkit/bin, a PATH-ra pedig a /usr/local/bin/security-toolkit
-# szimbolikus link teszi. A /usr/local/bin minden felhasználó és szolgáltatás (pl. az Azure
-# DevOps agent) alapértelmezett PATH-ján rajta van.
+# The CLI goes to /opt/security-toolkit/bin and onto PATH through the /usr/local/bin/security-toolkit
+# symlink. /usr/local/bin is on the default PATH of every user and service (e.g. the Azure
+# DevOps agent).
 set -euo pipefail
 
 if [ "$(id -u)" -ne 0 ]; then
-    echo "Ez a telepítő rendszerszinten telepít, minden felhasználó és szolgáltatás-fiók számára," >&2
-    echo "ezért root jog kell hozzá: sudo bash install.sh" >&2
+    echo "This installer installs machine-wide, for every user and service account," >&2
+    echo "so it needs root: sudo bash install.sh" >&2
     exit 1
 fi
 
@@ -18,11 +18,11 @@ cd "$repo_root"
 case "$(uname -m)" in
     x86_64 | amd64) rid=linux-x64 ;;
     aarch64 | arm64) rid=linux-arm64 ;;
-    *) echo "Nem támogatott architektúra: $(uname -m)" >&2; exit 1 ;;
+    *) echo "Unsupported architecture: $(uname -m)" >&2; exit 1 ;;
 esac
 
-# sudo alatt a publikálás a hívó felhasználó nevében fut: így a bin/ és obj/ mappák nem lesznek
-# root tulajdonúak, és a felhasználó saját dotnet-telepítése (pl. ~/.dotnet) is használható.
+# Under sudo the publish runs as the calling user, so bin/ and obj/ don't end up owned by root,
+# and the user's own dotnet installation (e.g. ~/.dotnet) can be used.
 run_as_caller() {
     if [ -n "${SUDO_USER:-}" ] && [ "$SUDO_USER" != "root" ]; then
         sudo -u "$SUDO_USER" -H env "PATH=$caller_path" "$@"
@@ -38,13 +38,13 @@ if [ -n "${SUDO_USER:-}" ] && [ "$SUDO_USER" != "root" ]; then
 fi
 
 if ! run_as_caller sh -c 'command -v dotnet' >/dev/null 2>&1; then
-    echo "A dotnet nem található (a global.json szerinti .NET SDK kell). Telepítsd, majd futtasd újra." >&2
+    echo "dotnet was not found (the .NET SDK named in global.json is required). Install it, then run this again." >&2
     exit 1
 fi
 
-echo "Publikálás: dotnet publish src/SecurityToolkit.Cli -c Release -r $rid -p:SelfContained=true"
+echo "Publishing: dotnet publish src/SecurityToolkit.Cli -c Release -r $rid -p:SelfContained=true"
 if ! run_as_caller dotnet publish src/SecurityToolkit.Cli -c Release -r "$rid" -p:SelfContained=true; then
-    echo "Publikálás sikertelen, telepítés megszakítva." >&2
+    echo "Publish failed, installation aborted." >&2
     exit 1
 fi
 
@@ -52,9 +52,9 @@ target=/opt/security-toolkit/bin
 install -d -m 755 "$target"
 install -m 755 "src/SecurityToolkit.Cli/bin/Release/net11.0/$rid/publish/security-toolkit" "$target/security-toolkit"
 ln -sf "$target/security-toolkit" /usr/local/bin/security-toolkit
-echo "Telepítve: $target/security-toolkit (PATH: /usr/local/bin/security-toolkit)"
+echo "Installed: $target/security-toolkit (PATH: /usr/local/bin/security-toolkit)"
 
-# --- Gépi szintű, projektfüggetlen infrastruktúra (opcionális) ---
+# --- Machine-level, project-independent infrastructure (optional) ---
 infra_args=()
 ask_infra=1
 for arg in "$@"; do
@@ -62,31 +62,31 @@ for arg in "$@"; do
         --sonar) infra_args+=(--sonar); ask_infra=0 ;;
         --mssql) infra_args+=(--mssql); ask_infra=0 ;;
         --no-infra) ask_infra=0 ;;
-        *) echo "Ismeretlen kapcsoló: $arg (használható: --sonar, --mssql, --no-infra)" >&2; exit 1 ;;
+        *) echo "Unknown switch: $arg (supported: --sonar, --mssql, --no-infra)" >&2; exit 1 ;;
     esac
 done
 
 ask() {
     local answer
-    read -r -p "$1 [i/n] " answer
-    case "$answer" in i | I | y | Y) return 0 ;; *) return 1 ;; esac
+    read -r -p "$1 [y/n] " answer
+    case "$answer" in y | Y | yes | YES) return 0 ;; *) return 1 ;; esac
 }
 
 if [ "$ask_infra" -eq 1 ] && [ -t 0 ]; then
     echo
-    echo "Gépi szintű infrastruktúra (Docker kell hozzá; fejlesztői gépen általában kihagyható):"
-    if ask "Közös SonarQube + PostgreSQL telepítése/frissítése ezen a gépen?"; then infra_args+=(--sonar); fi
-    if ask "Közös teszt-SQL Server (MSSQL) telepítése/frissítése ezen a gépen?"; then infra_args+=(--mssql); fi
+    echo "Machine-level infrastructure (needs Docker; usually skipped on a developer machine):"
+    if ask "Install/update the shared SonarQube + PostgreSQL on this machine?"; then infra_args+=(--sonar); fi
+    if ask "Install/update the shared test SQL Server (MSSQL) on this machine?"; then infra_args+=(--mssql); fi
 fi
 
 if [ "${#infra_args[@]}" -gt 0 ]; then
     echo
-    echo "Infrastruktúra: security-toolkit infra install ${infra_args[*]}"
+    echo "Infrastructure: security-toolkit infra install ${infra_args[*]}"
     if ! "$target/security-toolkit" infra install "${infra_args[@]}"; then
-        echo "Az infrastruktúra telepítése sikertelen, lásd a fenti üzeneteket. A CLI telepítése ettől még érvényes." >&2
+        echo "Installing the infrastructure failed, see the messages above. The CLI installation is still valid." >&2
         exit 2
     fi
 fi
 
 echo
-echo "Kész: security-toolkit --help"
+echo "Done: security-toolkit --help"

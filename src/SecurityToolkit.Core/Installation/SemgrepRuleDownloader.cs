@@ -97,7 +97,7 @@ public sealed class SemgrepRuleDownloader
             {
                 var hash = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(path)));
                 messages.Add(
-                    $"Semgrep snapshot: {url}; SHA256={hash}. Gyártói szabálylicenc érvényes; a snapshot csak tudatos frissítéskor változik.");
+                    $"Semgrep snapshot: {url}; SHA256={hash}. The vendor rule license applies; the snapshot changes only when you deliberately refresh it.");
             }
         }
 

@@ -37,17 +37,16 @@ public class PromptsTests
     }
 
     [Theory]
-    [InlineData("igen", true)]
     [InlineData("y", true)]
     [InlineData("yes", true)]
-    [InlineData("nem", false)]
+    [InlineData("NO", false)]
     [InlineData("n", false)]
     [InlineData("no", false)]
     public void ReadYesNo_RecognizesAnswer(string answer, bool expected)
     {
         var prompts = new ConsolePrompts();
 
-        var (result, _) = RunWithConsole(answer + "\n", () => prompts.ReadYesNo("Kerdes", defaultValue: !expected));
+        var (result, _) = RunWithConsole(answer + "\n", () => prompts.ReadYesNo("Question", defaultValue: !expected));
 
         Assert.Equal(expected, result);
     }
@@ -57,7 +56,7 @@ public class PromptsTests
     {
         var prompts = new ConsolePrompts();
 
-        var (result, _) = RunWithConsole("\n", () => prompts.ReadYesNo("Kerdes", defaultValue: true));
+        var (result, _) = RunWithConsole("\n", () => prompts.ReadYesNo("Question", defaultValue: true));
 
         Assert.True(result);
     }
@@ -67,7 +66,7 @@ public class PromptsTests
     {
         var prompts = new ConsolePrompts();
 
-        var (result, _) = RunWithConsole("bogus\nigen\n", () => prompts.ReadYesNo("Kerdes", defaultValue: false));
+        var (result, _) = RunWithConsole("bogus\nyes\n", () => prompts.ReadYesNo("Question", defaultValue: false));
 
         Assert.True(result);
     }
@@ -77,7 +76,7 @@ public class PromptsTests
     {
         var prompts = new ConsolePrompts();
 
-        var (result, _) = RunWithConsole("\n", () => prompts.ReadValue("Ertek", "default-value"));
+        var (result, _) = RunWithConsole("\n", () => prompts.ReadValue("Value", "default-value"));
 
         Assert.Equal("default-value", result);
     }
@@ -87,7 +86,7 @@ public class PromptsTests
     {
         var prompts = new ConsolePrompts();
 
-        var (result, _) = RunWithConsole("custom-value\n", () => prompts.ReadValue("Ertek", "default-value"));
+        var (result, _) = RunWithConsole("custom-value\n", () => prompts.ReadValue("Value", "default-value"));
 
         Assert.Equal("custom-value", result);
     }
@@ -181,8 +180,8 @@ public class PromptsTests
     {
         var prompts = new NonInteractivePrompts();
 
-        Assert.True(prompts.ReadYesNo("Kerdes", true));
-        Assert.False(prompts.ReadYesNo("Kerdes", false));
+        Assert.True(prompts.ReadYesNo("Question", true));
+        Assert.False(prompts.ReadYesNo("Question", false));
     }
 
     [Fact]
@@ -190,7 +189,7 @@ public class PromptsTests
     {
         var prompts = new NonInteractivePrompts();
 
-        Assert.Equal("default", prompts.ReadValue("Ertek", "default"));
+        Assert.Equal("default", prompts.ReadValue("Value", "default"));
     }
 
     [Fact]

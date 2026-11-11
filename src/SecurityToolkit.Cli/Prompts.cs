@@ -28,7 +28,7 @@ public sealed class ConsolePrompts : IConsolePrompts
 {
     public bool ReadYesNo(string prompt, bool defaultValue)
     {
-        var label = defaultValue ? "I/n" : "i/N";
+        var label = defaultValue ? "Y/n" : "y/N";
         while (true)
         {
             Console.Write($"{prompt} [{label}]: ");
@@ -38,12 +38,12 @@ public sealed class ConsolePrompts : IConsolePrompts
                 return defaultValue;
             }
 
-            if (System.Text.RegularExpressions.Regex.IsMatch(answer, "^(i|igen|y|yes)$", System.Text.RegularExpressions.RegexOptions.IgnoreCase))
+            if (System.Text.RegularExpressions.Regex.IsMatch(answer, "^(y|yes)$", System.Text.RegularExpressions.RegexOptions.IgnoreCase))
             {
                 return true;
             }
 
-            if (System.Text.RegularExpressions.Regex.IsMatch(answer, "^(n|nem|no)$", System.Text.RegularExpressions.RegexOptions.IgnoreCase))
+            if (System.Text.RegularExpressions.Regex.IsMatch(answer, "^(n|no)$", System.Text.RegularExpressions.RegexOptions.IgnoreCase))
             {
                 return false;
             }
@@ -85,7 +85,7 @@ public sealed class ConsolePrompts : IConsolePrompts
 
         while (true)
         {
-            Console.Write("Sorszámok vesszővel, Enter: mind, 0: egyik sem: ");
+            Console.Write("Numbers separated by commas, Enter: all, 0: none: ");
             var answer = Console.ReadLine();
             if (string.IsNullOrEmpty(answer))
             {

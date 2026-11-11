@@ -56,7 +56,7 @@ public class FindingBaselineTests
             var result = Assert.Single(outcome.Results);
             Assert.False(result.Blocking);
             Assert.Equal(2, result.Findings); // the report still lists every finding
-            Assert.Contains("2 ismert, 0 új", result.Message, StringComparison.Ordinal);
+            Assert.Contains("2 known, 0 new", result.Message, StringComparison.Ordinal);
         }
         finally
         {
@@ -75,7 +75,7 @@ public class FindingBaselineTests
             var outcome = await Run(context, new FixedScanner("gitleaks", Gitleaks("fp1", "fp1")));
 
             Assert.Equal(1, outcome.ExitCode);
-            Assert.Contains("1 ismert, 1 új", Assert.Single(outcome.Results).Message, StringComparison.Ordinal);
+            Assert.Contains("1 known, 1 new", Assert.Single(outcome.Results).Message, StringComparison.Ordinal);
         }
         finally
         {
@@ -180,7 +180,7 @@ public class FindingBaselineTests
             Assert.Equal(2, outcome.ExitCode); // the semgrep failure still counts
             Assert.All(outcome.Results, r => Assert.False(r.Blocking));
             Assert.Contains(outcome.Notes!, n => n.Contains("gitleaks → 3", StringComparison.Ordinal));
-            Assert.Contains(outcome.Notes!, n => n.Contains("semgrep nem frissült", StringComparison.Ordinal));
+            Assert.Contains(outcome.Notes!, n => n.Contains("semgrep not updated", StringComparison.Ordinal));
 
             var baseline = FindingBaseline.Load(context.ToolkitDirectory)!;
             Assert.Equal(new Dictionary<string, int> { ["fp1"] = 2, ["fp2"] = 1 }, baseline["gitleaks"]);

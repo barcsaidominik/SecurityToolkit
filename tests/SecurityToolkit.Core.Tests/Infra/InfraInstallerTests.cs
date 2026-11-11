@@ -173,7 +173,7 @@ public class InfraInstallerTests : IDisposable
         var env = InfraInstaller.ReadEnv(Path.Combine(_infra, "sonar", ".env"));
         Assert.Equal("legacy+pw/==", env["SONAR_DB_PASSWORD"]);
         Assert.Equal(SonarDigest, env["SONAR_IMAGE"]);
-        Assert.Contains(outcome.Messages, m => m.Contains("átvéve", StringComparison.Ordinal));
+        Assert.Contains(outcome.Messages, m => m.Contains("were taken over from", StringComparison.Ordinal));
         Assert.True(File.Exists(Path.Combine(_legacy, ".env"))); // never deleted
     }
 

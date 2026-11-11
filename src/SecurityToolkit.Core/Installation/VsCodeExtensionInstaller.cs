@@ -46,7 +46,7 @@ public sealed class VsCodeExtensionInstaller
             return new VsCodeExtensionOutcome(
                 CodeNotFound: false,
                 InstalledExtensionIds: Array.Empty<string>(),
-                "Nincs választott automatikusan telepítendő IDE extension. A .NET analyzerek a projektbeállításokon keresztül működnek.");
+                "No IDE extension selected for automatic installation. The .NET analyzers work through the project settings.");
         }
 
         var codePath = _findOnPath("code");
@@ -71,6 +71,6 @@ public sealed class VsCodeExtensionInstaller
         return new VsCodeExtensionOutcome(
             CodeNotFound: false,
             ids,
-            "Visual Studio extension telepítése és IDE connected mode autentikációja az IDE saját Extension Manager/connection wizard felületén történik.");
+            "Visual Studio extensions and IDE connected-mode authentication are set up in the IDE's own Extension Manager / connection wizard.");
     }
 }
