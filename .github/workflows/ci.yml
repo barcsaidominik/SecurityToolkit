@@ -1,0 +1,41 @@
+# Builds and tests the toolkit on every push to master and every pull request, on both host
+# platforms the CLI supports.
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          global-json-file: global.json
+
+      - name: Build
+        run: dotnet build SecurityToolkit.slnx -c Release
+
+      - name: Test
+        run: dotnet test SecurityToolkit.slnx -c Release --no-build
+
+      - name: Check formatting
+        if: runner.os == 'Linux'
+        run: dotnet format SecurityToolkit.slnx --verify-no-changes --no-restore

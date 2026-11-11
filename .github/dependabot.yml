@@ -1,0 +1,20 @@
+# Keeps the commit-SHA-pinned actions of this repository's own workflows and the NuGet packages
+# up to date. The action pins written into target projects' generated workflows are constants in
+# PipelineGenerator and are updated by hand together with these.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+
+  - package-ecosystem: nuget
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      test-dependencies:
+        patterns:
+          - "xunit*"
+          - "Microsoft.NET.Test.Sdk"
+          - "coverlet.*"

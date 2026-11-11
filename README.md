@@ -1,38 +1,93 @@
 # SecurityToolkit
 
-Projektfüggetlen biztonsági scanner-csomag .NET és Angular repókhoz, Azure DevOps self-hosted
-pipeline-nal, Windows és Linux gépekre. Egy CLI (`security-toolkit`) telepíti a projektekbe,
-futtatja a scannereket (.NET analyzerek, NuGet- és npm-audit, Semgrep, Gitleaks, OSV-Scanner,
-DevSkim, SonarQube coverage-dzsel), és kezeli a gépi infrát (közös SonarQube, teszt-SQL Server).
+**English** · [Magyar](README.hu.md)
 
-## Dokumentáció
+[![CI](https://github.com/barcsaidominik/SecurityToolkit/actions/workflows/ci.yml/badge.svg)](https://github.com/barcsaidominik/SecurityToolkit/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-**[Telepítési és üzemeltetési útmutató →](docs/README.md)**: nulláról a zöld pipeline-ig, a
-CI-gép előkészítésétől a találatok triázsáig.
+A project-independent security scanning toolkit for .NET and Angular repositories, on Windows and
+Linux. One CLI, `security-toolkit`, installs itself into any repository, runs the scanners
+locally, in a pre-commit hook and in a generated CI pipeline, and manages the shared machine-level
+infrastructure (a SonarQube server and a test SQL Server).
 
-## Gyorsindítás
+## What it runs
 
-Windows, rendszergazdai parancssorból, a repó gyökerében:
+| Scanner | What it finds |
+|---|---|
+| .NET security analyzers | CA30xx/CA31xx security rules (SQL injection, path traversal, XSS, unsafe XML processing …) at build time |
+| NuGet audit, npm audit | known vulnerable packages |
+| Semgrep CE | static analysis of C# and JS/TS, with registry rules pinned into the repository |
+| Gitleaks | secrets in the working tree, in staged changes (pre-commit) and in git history |
+| OSV-Scanner | a second opinion on dependency vulnerabilities |
+| DevSkim | additional security linting |
+| SonarQube | server-side analysis with .NET and Angular (Karma or Vitest) test coverage |
+
+Every scanner can be switched on or off per repository. Docker images are pinned by digest and
+.NET tools by version in a committed lock file, so CI runs exactly what was reviewed.
+
+## How it works
+
+- **Machine level, once per machine:** `install.bat` (Windows) or `install.sh` (Linux) publishes
+  the CLI as a self-contained binary onto the system PATH, and can install the shared SonarQube +
+  PostgreSQL and a test SQL Server in Docker.
+- **Project level, once per repository:** `security-toolkit install` writes a `.security/` folder
+  (config, lock, rules), managed blocks in `.gitignore`, `.semgrepignore`, `Directory.Build.props`
+  and `.editorconfig`, a Gitleaks pre-commit hook, and an Azure DevOps pipeline and/or GitHub
+  Actions workflow. Every file it changes is backed up and can be restored.
+- **Every run:** `security-toolkit scan` runs the enabled scanners and writes `status.json` and a
+  Markdown `summary.md`. In **Gate** mode it fails on secrets, Semgrep errors and high/critical
+  package vulnerabilities; with a committed baseline only *new* findings fail it.
+
+## Quick start
+
+Requirements: the .NET SDK pinned in `global.json`, Git, Docker (for Semgrep, Gitleaks,
+OSV-Scanner and the shared infra) and, for frontend scans, Node.js.
+
+Windows, from an elevated command prompt in the repository root:
 
 ```bat
 install.bat --no-infra
 ```
 
-Linux, a repó gyökerében:
+Linux, in the repository root:
 
 ```bash
 sudo bash install.sh --no-infra
 ```
 
-Utána új terminálban, a célrepóban:
+Then, from a new terminal, in the repository you want to protect:
 
 ```
 security-toolkit install --project-root .
+security-toolkit scan --project-root .
 ```
 
-## Build és teszt
+Drop `--no-infra` (or pass `--sonar` / `--mssql`) to also install the shared SonarQube and test
+SQL Server. `security-toolkit --help` lists every command.
+
+Releases (`v*` tags) publish self-contained binaries for `win-x64`, `linux-x64` and `linux-arm64`
+with a `SHA256SUMS` file. A target project can pin one (`toolkitRelease` in
+`.security/security.config.json`) so that its pipeline downloads and verifies the CLI on hosted,
+ephemeral agents.
+
+## Documentation
+
+The detailed installation and operations guide is currently in Hungarian:
+**[docs/README.md](docs/README.md)**. It goes from an empty machine to a green pipeline:
+preparing the CI machine and agent, the shared Sonar and SQL Server, installing into a project,
+the pipeline, triaging the results, the full CLI reference and troubleshooting.
+
+## Building from source
 
 ```
 dotnet build SecurityToolkit.slnx
 dotnet test SecurityToolkit.slnx
 ```
+
+## Security
+
+See [SECURITY.md](SECURITY.md) for how to report a vulnerability.
+
+## License
+
+[MIT](LICENSE)

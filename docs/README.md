@@ -26,7 +26,7 @@ rétegből áll:
 └───────────────────────────────────────────────────────────────────────────────────┘
 
 ┌───────────────────────────── célprojekt (bármely repo) ───────────────────────────┐
-│  .security/                    konfiguráció, lock, szabályok, init-scriptek       │
+│  .security/                    konfiguráció, lock, szabályok                      │
 │  azure-security-toolkit.yml    generált pipeline                                  │
 │  managed blokkok               .gitignore, .semgrepignore, Directory.Build.props, │
 │                                .editorconfig                                      │

@@ -1,0 +1,38 @@
+# Reviewed false positives (gitleaks 8.x fingerprints). None of them is a real secret:
+# - curl-auth-user: documentation examples whose credential is a ${token} placeholder;
+# - generic-api-key: InfraInstaller.PasswordAlphabet, the character set passwords are drawn from;
+# - aws-access-token: a made-up, AWS-shaped key the Gitleaks scanner tests feed to gitleaks.
+# Working-tree fingerprints are file:rule:line, so a line that moves shows up again: review it
+# and update the entry rather than widening this list.
+
+# git history (initial commit)
+cc91663eb2c9271bb8ccbfbe4fab386eeaf695a9:docs/02-sonar-es-mssql.md:curl-auth-user:117
+cc91663eb2c9271bb8ccbfbe4fab386eeaf695a9:docs/07-hibaelharitas.md:curl-auth-user:39
+cc91663eb2c9271bb8ccbfbe4fab386eeaf695a9:src/SecurityToolkit.Core/Infra/InfraInstaller.cs:generic-api-key:40
+cc91663eb2c9271bb8ccbfbe4fab386eeaf695a9:tests/SecurityToolkit.Core.Tests/Scanners/GitleaksScannerTests.cs:aws-access-token:25
+cc91663eb2c9271bb8ccbfbe4fab386eeaf695a9:tests/SecurityToolkit.Core.Tests/Scanners/GitleaksScannerTests.cs:aws-access-token:26
+cc91663eb2c9271bb8ccbfbe4fab386eeaf695a9:tests/SecurityToolkit.Core.Tests/Scanners/GitleaksScannerTests.cs:aws-access-token:27
+cc91663eb2c9271bb8ccbfbe4fab386eeaf695a9:tests/SecurityToolkit.Core.Tests/Scanners/GitleaksScannerTests.cs:aws-access-token:44
+cc91663eb2c9271bb8ccbfbe4fab386eeaf695a9:tests/SecurityToolkit.Core.Tests/Scanners/GitleaksScannerTests.cs:aws-access-token:71
+cc91663eb2c9271bb8ccbfbe4fab386eeaf695a9:tests/SecurityToolkit.Core.Tests/Scanners/GitleaksScannerTests.cs:aws-access-token:72
+cc91663eb2c9271bb8ccbfbe4fab386eeaf695a9:tests/SecurityToolkit.Core.Tests/Scanners/GitleaksScannerTests.cs:aws-access-token:73
+cc91663eb2c9271bb8ccbfbe4fab386eeaf695a9:tests/SecurityToolkit.Core.Tests/Scanners/GitleaksScannerTests.cs:aws-access-token:127
+cc91663eb2c9271bb8ccbfbe4fab386eeaf695a9:tests/SecurityToolkit.Core.Tests/Scanners/GitleaksScannerTests.cs:aws-access-token:128
+cc91663eb2c9271bb8ccbfbe4fab386eeaf695a9:tests/SecurityToolkit.Core.Tests/Scanners/GitleaksScannerTests.cs:aws-access-token:129
+cc91663eb2c9271bb8ccbfbe4fab386eeaf695a9:tests/SecurityToolkit.Core.Tests/Scanners/GitleaksScannerTests.cs:aws-access-token:146
+
+# working tree
+docs/02-sonar-es-mssql.md:curl-auth-user:128
+docs/07-hibaelharitas.md:curl-auth-user:38
+src/SecurityToolkit.Core/Infra/InfraInstaller.cs:generic-api-key:40
+tests/SecurityToolkit.Core.Tests/Scanners/GitleaksScannerTests.cs:aws-access-token:25
+tests/SecurityToolkit.Core.Tests/Scanners/GitleaksScannerTests.cs:aws-access-token:26
+tests/SecurityToolkit.Core.Tests/Scanners/GitleaksScannerTests.cs:aws-access-token:27
+tests/SecurityToolkit.Core.Tests/Scanners/GitleaksScannerTests.cs:aws-access-token:44
+tests/SecurityToolkit.Core.Tests/Scanners/GitleaksScannerTests.cs:aws-access-token:71
+tests/SecurityToolkit.Core.Tests/Scanners/GitleaksScannerTests.cs:aws-access-token:72
+tests/SecurityToolkit.Core.Tests/Scanners/GitleaksScannerTests.cs:aws-access-token:73
+tests/SecurityToolkit.Core.Tests/Scanners/GitleaksScannerTests.cs:aws-access-token:127
+tests/SecurityToolkit.Core.Tests/Scanners/GitleaksScannerTests.cs:aws-access-token:128
+tests/SecurityToolkit.Core.Tests/Scanners/GitleaksScannerTests.cs:aws-access-token:129
+tests/SecurityToolkit.Core.Tests/Scanners/GitleaksScannerTests.cs:aws-access-token:146
