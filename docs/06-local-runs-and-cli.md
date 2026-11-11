@@ -39,6 +39,11 @@ $env:SONAR_TOKEN = Read-Host 'Sonar user token'
 security-toolkit scan --project-root . --tool sonar --include-sonar
 ```
 
+The CLI hands the token to the SonarScanner's `begin` and `end` steps in the `SONARQUBE_SCANNER_PARAMS`
+environment variable, not on their command line, so other users on the machine cannot see it in the
+process list. If you already set `SONARQUBE_SCANNER_PARAMS` yourself (a JSON object), its other
+properties are kept.
+
 With coverage, you have to set the **environment variables** of `sonar.testEnvironment` locally yourself
 (the pipeline variables do not exist here), e.g.:
 

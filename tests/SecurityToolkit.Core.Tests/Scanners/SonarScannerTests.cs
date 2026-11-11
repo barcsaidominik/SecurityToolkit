@@ -58,6 +58,96 @@ public class SonarScannerTests
         }
     }
 
+    private const string ScannerParams = "SONARQUBE_SCANNER_PARAMS";
+
+    [Theory]
+    [InlineData(null, null)]
+    [InlineData("""{"sonar.verbose":"true"}""", "true")]
+    public async Task RunAsync_TokenGoesToBeginAndEndThroughTheEnvironment_NeverOnACommandLine(string? existing, string? keptVerbose)
+    {
+        var (context, root) = ScanContextTestFactory.Create(
+            config: SonarConfig(),
+            @lock: SonarLock(),
+            includeSonar: true,
+            sonarToken: "s3cr3t-token");
+
+        Environment.SetEnvironmentVariable(ScannerParams, existing);
+        try
+        {
+            Directory.CreateDirectory(Path.Combine(root, "src"));
+            File.WriteAllText(Path.Combine(root, "src", "app.sln"), "");
+            var executablePath = Path.Combine(context.ToolkitDirectory, "bin",
+                "dotnet-sonarscanner" + (OperatingSystem.IsWindows() ? ".exe" : string.Empty));
+
+            var seen = new List<string?>();
+            ProcessResult Capture(FakeProcessRunner.RecordedCall _)
+            {
+                seen.Add(Environment.GetEnvironmentVariable(ScannerParams));
+                return new ProcessResult(0, "", "");
+            }
+
+            var runner = new FakeProcessRunner();
+            runner.Enqueue(executablePath, Capture); // begin
+            runner.Enqueue("dotnet", Capture); // build
+            runner.Enqueue(executablePath, Capture); // end
+            runner.Enqueue("dotnet", new ProcessResult(0, "", "")); // build-server shutdown
+
+            var result = Assert.Single(await new SonarScanner(runner, StubIssueSearchClient()).RunAsync(context));
+
+            Assert.Equal(ScanStatus.Completed, result.Status);
+            Assert.DoesNotContain(runner.Calls, call => call.Arguments.Any(a => a.Contains("s3cr3t-token", StringComparison.Ordinal)));
+
+            foreach (var stepValue in new[] { seen[0], seen[2] })
+            {
+                var parameters = System.Text.Json.Nodes.JsonNode.Parse(stepValue!)!.AsObject();
+                Assert.Equal("s3cr3t-token", parameters["sonar.token"]!.GetValue<string>());
+                Assert.Equal(keptVerbose, parameters["sonar.verbose"]?.GetValue<string>());
+            }
+
+            // The build in between never sees the token, and the variable is restored afterwards.
+            Assert.Equal(existing, seen[1]);
+            Assert.Equal(existing, Environment.GetEnvironmentVariable(ScannerParams));
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(ScannerParams, null);
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Theory]
+    [InlineData("trash")]
+    [InlineData("[1,2]")]
+    public async Task RunAsync_ExistingScannerParamsNotAJsonObject_FailsBeforeBeginWithoutEchoingIt(string existing)
+    {
+        var (context, root) = ScanContextTestFactory.Create(
+            config: SonarConfig(),
+            @lock: SonarLock(),
+            includeSonar: true,
+            sonarToken: "s3cr3t-token");
+
+        Environment.SetEnvironmentVariable(ScannerParams, existing);
+        try
+        {
+            Directory.CreateDirectory(Path.Combine(root, "src"));
+            File.WriteAllText(Path.Combine(root, "src", "app.sln"), "");
+
+            var runner = new FakeProcessRunner();
+            var result = Assert.Single(await new SonarScanner(runner, StubIssueSearchClient()).RunAsync(context));
+
+            Assert.Equal(ScanStatus.Failed, result.Status);
+            Assert.Contains(ScannerParams, result.Message);
+            Assert.DoesNotContain(existing, result.Message);
+            Assert.Empty(runner.Calls);
+            Assert.Equal(existing, Environment.GetEnvironmentVariable(ScannerParams));
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(ScannerParams, null);
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
     [Fact]
     public async Task RunAsync_BeginAndBuildSucceed_EndRunsAndResultIsCompleted()
     {

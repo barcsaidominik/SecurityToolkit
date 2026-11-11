@@ -38,6 +38,10 @@ $env:SONAR_TOKEN = Read-Host 'Sonar user token'
 security-toolkit scan --project-root . --tool sonar --include-sonar
 ```
 
+A CLI a tokent a SonarScanner `begin` és `end` lépésének a `SONARQUBE_SCANNER_PARAMS` környezeti
+változóban adja át, nem a parancssorukban, így a gép többi felhasználója nem látja a folyamatlistában.
+Ha a `SONARQUBE_SCANNER_PARAMS`-ot magad is beállítod (JSON-objektum), a többi property-je megmarad.
+
 Coverage-zel együtt a `sonar.testEnvironment` **környezeti változóit** helyben neked kell
 beállítani (a pipeline-változók itt nem léteznek), pl.:
 

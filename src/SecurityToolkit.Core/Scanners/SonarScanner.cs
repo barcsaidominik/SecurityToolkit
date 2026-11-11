@@ -132,6 +132,65 @@ public sealed class SonarScanner : IScanner
         }
     }
 
+    /// <summary>
+    /// SonarScanner for .NET reads analysis properties from this JSON object env var, in both
+    /// "begin" and "end" (the variable its Azure DevOps extension uses).
+    /// </summary>
+    internal const string ScannerParamsVariable = "SONARQUBE_SCANNER_PARAMS";
+
+    /// <summary>
+    /// Runs "begin" or "end" with the token in <see cref="ScannerParamsVariable"/> instead of a
+    /// /d:sonar.token argument: a command line is readable by every local user (ps,
+    /// /proc/&lt;pid&gt;/cmdline), a process environment only by its owner and root. Set just for
+    /// this call, not for the build or the tests in between, and restored afterwards. Both steps
+    /// need it: "end" without the token is "Not authorized".
+    /// </summary>
+    private async Task RunScannerStepAsync(
+        ScanContext context, string executable, IReadOnlyList<string> arguments, string logFileName, CancellationToken cancellationToken)
+    {
+        var previous = Environment.GetEnvironmentVariable(ScannerParamsVariable);
+        Environment.SetEnvironmentVariable(ScannerParamsVariable, WithToken(previous, context.SonarToken!));
+        try
+        {
+            await ScannerSupport.RunNativeAsync(
+                _processRunner, context, executable, arguments, logFileName,
+                cancellationToken: cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(ScannerParamsVariable, previous);
+        }
+    }
+
+    /// <summary>
+    /// Adds sonar.token to an existing <see cref="ScannerParamsVariable"/> value (other properties
+    /// are kept), or starts a new object. A value that is not a JSON object fails the step; its
+    /// content is never echoed, it may hold secrets.
+    /// </summary>
+    internal static string WithToken(string? existing, string token)
+    {
+        System.Text.Json.Nodes.JsonObject parameters;
+        if (string.IsNullOrWhiteSpace(existing))
+        {
+            parameters = new System.Text.Json.Nodes.JsonObject();
+        }
+        else
+        {
+            try
+            {
+                parameters = System.Text.Json.Nodes.JsonNode.Parse(existing) as System.Text.Json.Nodes.JsonObject
+                    ?? throw new InvalidOperationException($"{ScannerParamsVariable} is set but is not a JSON object.");
+            }
+            catch (System.Text.Json.JsonException)
+            {
+                throw new InvalidOperationException($"{ScannerParamsVariable} is set but is not valid JSON.");
+            }
+        }
+
+        parameters["sonar.token"] = token;
+        return parameters.ToJsonString();
+    }
+
     private async Task<IReadOnlyList<ScanResult>> RunBeginBuildEndAsync(
         ScanContext context, string executable, string url, string projectKey, string target, CoveragePlan coverage,
         CancellationToken cancellationToken)
@@ -141,7 +200,6 @@ public sealed class SonarScanner : IScanner
             "begin",
             $"/k:{projectKey}",
             $"/d:sonar.host.url={url}",
-            $"/d:sonar.token={context.SonarToken}",
             "/d:sonar.scanner.scanAll=true",
             "/d:sonar.exclusions=**/bin/**,**/obj/**,**/node_modules/**,**/dist/**,**/coverage/**,.security/**",
         };
@@ -163,9 +221,7 @@ public sealed class SonarScanner : IScanner
                 ',', coverage.FrontendTargets.Select(t => ToSonarPath(Path.Combine(t.CoverageDirectory, "lcov.info")))));
         }
 
-        await ScannerSupport.RunNativeAsync(
-            _processRunner, context, executable, beginArguments, "sonar-begin.log",
-            cancellationToken: cancellationToken).ConfigureAwait(false);
+        await RunScannerStepAsync(context, executable, beginArguments, "sonar-begin.log", cancellationToken).ConfigureAwait(false);
 
         var coverageNotes = new List<string>(coverage.Notes);
 
@@ -188,9 +244,7 @@ public sealed class SonarScanner : IScanner
         {
             try
             {
-                await ScannerSupport.RunNativeAsync(
-                    _processRunner, context, executable, new[] { "end", $"/d:sonar.token={context.SonarToken}" }, "sonar-end.log",
-                    cancellationToken: cancellationToken).ConfigureAwait(false);
+                await RunScannerStepAsync(context, executable, new[] { "end" }, "sonar-end.log", cancellationToken).ConfigureAwait(false);
             }
             finally
             {
