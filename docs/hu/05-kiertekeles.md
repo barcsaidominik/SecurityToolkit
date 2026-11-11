@@ -125,7 +125,7 @@ jelenik meg:
 |---|---|---|
 | Találat esetén | exit 0, a lépés zöld | **exit 1** blokkoló találatnál |
 | Technikai hiba (pl. hiányzó config, elbukott eszköz) | exit 2 | exit 2 |
-| Sonar | csak feltölt | megvárja a Quality Gate-et; ha bukik, a lépés is elbukik |
+| Sonar | csak feltölt | megvárja a Quality Gate-et; ha bukik, a lépés is elbukik (exit 2, mint egy technikai hibánál) |
 | Hol használd | CI-pipeline (a generált pipeline alapból ezt használja), rendszeres riport | helyi ellenőrzés kiadás előtt, a generált pipeline `pipelineMode: "Gate"` mellett, egyedi pipeline-ok |
 
 **Mi blokkol Gate módban** (baseline nélkül abszolút küszöb, ld. lent):

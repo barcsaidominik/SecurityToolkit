@@ -38,6 +38,35 @@ Every scanner can be switched on or off per repository. Docker images are pinned
   Markdown `summary.md`. In **Gate** mode it fails on secrets, Semgrep errors and high/critical
   package vulnerabilities; with a committed baseline only *new* findings fail it.
 
+## Exit codes and failure handling
+
+| Exit | Meaning |
+|---|---|
+| `0` | every scanner that ran completed (in Report mode, with or without findings) |
+| `1` | Gate mode (or the `--staged` pre-commit scan) found a blocking finding |
+| `2` | a technical failure: a scanner could not run, exited with an unexpected code, or wrote a missing or unreadable report |
+
+A scanner failure is never reported as a clean result: it is recorded as `failed` in `status.json`
+and the run exits with `2` in both modes. Semgrep only counts as complete when every parse error
+it reports is a warn-level partial parse; any other analysis error fails the step. In Gate mode a
+failing SonarQube Quality Gate makes the Sonar step fail, so it shows up as exit `2`, not `1`.
+Disabled tools are skipped, not reported.
+
+## Scope and limitations
+
+The toolkit runs and pins existing open-source scanners and turns their output into one report and
+one gate decision. It is not a penetration test, it does not run dynamic (DAST) testing, and a clean
+run does not mean the code is free of vulnerabilities:
+
+- Only Gitleaks, Semgrep `ERROR` findings and High/Critical NuGet/npm advisories can block. The .NET
+  analyzers, OSV-Scanner and DevSkim are inventory only and never block.
+- The CA30xx taint rules see MVC controller action parameters only, not minimal API endpoints.
+  Semgrep CE analyzes one file at a time, without cross-file data flow.
+- Gitleaks is pattern-based, so a secret in an unrecognized format can pass, and the dependency
+  audits only know about published advisories.
+- A baseline entry for Gitleaks is keyed on the rule, file and redacted match, so a different secret
+  written to exactly the same key in the same file counts as already known.
+
 ## Quick start
 
 Requirements: the .NET SDK pinned in `global.json`, Git, Docker (for Semgrep, Gitleaks,

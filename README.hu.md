@@ -40,6 +40,35 @@ verzió szerint vannak rögzítve egy commitolt lock-fájlban, így a CI pontosa
   `status.json`-t meg egy Markdown `summary.md`-t ír. **Gate** módban titokra, Semgrep-hibára és
   high/critical csomagsérülékenységre bukik; commitolt baseline mellett csak az *új* találatokra.
 
+## Kilépési kódok és hibakezelés
+
+| Exit | Jelentés |
+|---|---|
+| `0` | minden lefutott scanner végigment (Report módban találattal vagy anélkül) |
+| `1` | Gate módban (vagy a `--staged` pre-commit scanben) blokkoló találat van |
+| `2` | technikai hiba: egy scanner nem tudott elindulni, váratlan kóddal lépett ki, vagy hiányzó, illetve olvashatatlan riportot írt |
+
+Egy scanner hibája sosem jelenik meg tiszta eredményként: a `status.json`-ban `failed` lesz, és a
+futás mindkét módban `2`-vel lép ki. A Semgrep csak akkor számít teljesnek, ha minden jelentett
+parse-hibája warn szintű részleges feldolgozás; minden más elemzési hiba bukott lépést ad. Gate
+módban egy bukó SonarQube Quality Gate a Sonar-lépést buktatja el, ezért `2`-ként jelenik meg, nem
+`1`-ként. A kikapcsolt eszközök kimaradnak, nem kerülnek a riportba.
+
+## Hatókör és korlátok
+
+A toolkit meglévő, nyílt forrású scannereket futtat rögzített verzióval, és a kimenetükből egy
+riportot és egy gate-döntést készít. Nem penetrációs teszt, nem végez dinamikus (DAST) tesztelést, és
+egy tiszta futás nem jelenti azt, hogy a kód sérülékenységmentes:
+
+- Blokkolni csak a Gitleaks, a Semgrep `ERROR` találatai és a High/Critical NuGet/npm advisoryk
+  tudnak. A .NET analyzerek, az OSV-Scanner és a DevSkim csak leltárt ad, sosem blokkol.
+- A CA30xx taint-szabályok csak az MVC controller-akciók paramétereit látják, a minimal API
+  végpontokat nem. A Semgrep CE fájlonként elemez, fájlokon átívelő adatfolyam nélkül.
+- A Gitleaks mintaalapú, így egy fel nem ismert formátumú titok átcsúszhat, a függőség-auditok pedig
+  csak a publikált advisorykat ismerik.
+- A Gitleaks baseline-bejegyzése a szabályra, a fájlra és a redaktált találatra épül, ezért ha
+  ugyanabban a fájlban pontosan ugyanarra a kulcsra egy másik titok kerül, az ismertnek számít.
+
 ## Gyorsindítás
 
 Előfeltételek: a `global.json`-ban rögzített .NET SDK, Git, Docker (a Semgrephez, a Gitleakshez,

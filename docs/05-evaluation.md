@@ -122,7 +122,7 @@ With the coverage import on, the *Message* column of the Sonar row contains a `C
 |---|---|---|
 | On findings | exit 0, the step is green | **exit 1** on a blocking finding |
 | Technical error (e.g. missing config, a failed tool) | exit 2 | exit 2 |
-| Sonar | uploads only | waits for the Quality Gate; if it fails, the step fails too |
+| Sonar | uploads only | waits for the Quality Gate; if it fails, the step fails too (exit 2, like a technical error) |
 | Where to use it | CI pipeline (the generated pipeline uses this by default), regular reports | local checks before a release, the generated pipeline with `pipelineMode: "Gate"`, custom pipelines |
 
 **What blocks in Gate mode** (an absolute threshold without a baseline, see below):
