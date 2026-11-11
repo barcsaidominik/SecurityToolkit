@@ -102,6 +102,35 @@ public class AnalyzersScannerTests
     }
 
     [Fact]
+    public async Task RunAsync_BuildFails_FailedResultKeepsTheToolName()
+    {
+        var (context, root) = ScanContextTestFactory.Create(config: AnalyzersConfig(), @lock: EmptyLock());
+
+        try
+        {
+            Directory.CreateDirectory(Path.Combine(root, "src"));
+            File.WriteAllText(Path.Combine(root, "src", "app.sln"), "");
+
+            var runner = new FakeProcessRunner();
+            runner.Enqueue("dotnet", new ProcessResult(0, "", "")); // restore
+            runner.Enqueue("dotnet", new ProcessResult(1, "", "error CS1002: ; expected")); // build fails
+            runner.Enqueue("dotnet", new ProcessResult(0, "", "")); // build-server shutdown
+
+            var result = Assert.Single(await new AnalyzersScanner(runner).RunAsync(context));
+
+            Assert.Equal(ScanStatus.Failed, result.Status);
+            // The scanner name, not the process name: status.json merges per tool name (a shared
+            // --run-id), so a failed run must replace the earlier "analyzers" entry.
+            Assert.Equal("analyzers", result.Tool);
+            Assert.Equal("src/app.sln", result.Target);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task RunAsync_Disabled_RunsNoProcessAtAll()
     {
         var config = AnalyzersConfig();

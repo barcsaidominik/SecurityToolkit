@@ -78,7 +78,7 @@ public sealed class AnalyzersScanner : IScanner
             }
             catch (Exception ex)
             {
-                results.Add(new ScanResult("dotnet", target, ScanStatus.Failed, null, Blocking: false, ex.Message));
+                results.Add(new ScanResult("analyzers", target, ScanStatus.Failed, null, Blocking: false, ex.Message));
             }
         }
 
