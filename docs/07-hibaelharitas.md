@@ -34,13 +34,13 @@ A tünet szerint keresd ki a hibát. Szinte mindegyik élesben előfordult már.
 | Tünet | Ok | Megoldás |
 |---|---|---|
 | `sonar … not-run` | nincs `--include-sonar` | a pipeline magától átadja; helyben add meg ([6.1](06-helyi-futtatas-es-cli.md#61-a-scan-parancs)) |
-| `Set SONAR_TOKEN.` | nincs token a lépés környezetében | pipeline: `SONAR_TOKEN` secret változó ([4.2](04-pipeline.md#42-pipeline-változók-és-secretek)); helyben: `$env:SONAR_TOKEN` a saját user tokeneddel ([2.2](02-sonar-es-mssql.md#személyes-user-token-helyi-futtatáshoz)) |
+| `Set the SONAR_TOKEN environment variable …` | nincs token a lépés környezetében | pipeline: `SONAR_TOKEN` secret változó ([4.2](04-pipeline.md#42-pipeline-változók-és-secretek)); helyben: `$env:SONAR_TOKEN` a saját user tokeneddel ([2.2](02-sonar-es-mssql.md#személyes-user-token-helyi-futtatáshoz)) |
 | A Sonar `begin` lefut, az `end` „not authorized” vagy „project not found” hibát ad | (a) rossz `sonar.projectKey`: a projekt „With Azure DevOps” opcióval jött létre, belső GUID-os kulccsal; (b) a token tulajdonosának nincs *Execute Analysis* joga (helyben: a te felhasználódnak); (c) helyben egy másik projekt project analysis tokenje van a `SONAR_TOKEN`-ben | (a) Sonar: *Project Settings* → *Update Key*, vagy `curl -u "<token>:" "<sonar>/api/components/search?qualifiers=TRK"` a valós kulcsért; (b) a jogosultság megadása ([2.2](02-sonar-es-mssql.md#project-analysis-token)); (c) a saját user tokened használata ([2.2](02-sonar-es-mssql.md#személyes-user-token-helyi-futtatáshoz)) |
 | Gitleaks: sok találat a `.sonarqube/` alól | régi toolkit-verzió (a Sonar munkamappája nem volt kizárva) | toolkit-frissítés, majd `install` ([3.7](03-telepites-projektbe.md#37-karbantartás-és-frissítés)) |
 | Scans fül: „File not found” egy Gitleaks-találatnál | `--history` módban egy régi commitban lévő, azóta áthelyezett fájlra mutat | a találat valós; a fájl a commit-azonosító alapján a historyban kereshető |
 | Nincs Scans fül | nincs telepítve a SARIF SAST Scans Tab extension | [4.0](04-pipeline.md#40-egyszeri-szervezeti-beállítás-sarif-scans-fül) |
 | npm: `npm audit requires package-lock.json or npm-shrinkwrap.json` | a frontend nem npm-mel kezelt (yarn/pnpm), vagy nincs lockfájl | `npm install` a lockfájl létrehozásához, vagy az npm eszköz kikapcsolása |
-| Semgrep `failed`, de vannak találatok | parse-hibák (gyakran C#) | `frontend` hatókör, ha Sonar is fut ([5.2](05-kiertekeles.md#52-eszközönként-hol-a-részlet-mit-jelent)) |
+| Semgrep `failed`, de vannak találatok | egy fájlt egyáltalán nem tudott értelmezni (gyakran C#), vagy timeout/szabályhiba; a csak részleges parse-hiba (`Partially parsed`) nem buktat | `frontend` hatókör, ha Sonar is fut ([5.2](05-kiertekeles.md#52-eszközönként-hol-a-részlet-mit-jelent)) |
 | Egy korábbi lépés hibája miatt a későbbi lépések is pirosak | régi toolkit-verzió (az összefésült eredményből számolt exit kódot) | toolkit-frissítés |
 
 ## Coverage

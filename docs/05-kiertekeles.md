@@ -75,9 +75,15 @@ Ha egy letöltött artifactot akarsz így nézni, másold a `<build-szám>` mapp
 > A Semgrepnél az `ERROR` a **szabály** súlyossága, nem egy általános „kritikus” címke. Egy `ERROR`
 > is lehet téves riasztás, és egy `WARNING` is lehet valódi hiba.
 
-> Ha a Semgrep `failed` státuszú, de vannak találatai, a vizsgálat hiányos volt: néhány fájlt nem
-> tudott értelmezni (parse-hiba). A `semgrep-coverage.json` mutatja, melyeket. A C#-nál ez gyakori,
-> ezért javasolt a `frontend` hatókör ([3.2](03-telepites-projektbe.md#további-kérdések)).
+> A Semgrep CE parsere a modern C# egyes (érvényes) szerkezeteit nem ismeri, pl. a záró vesszőt egy
+> `with { … }` inicializálóban. Két eset van:
+>
+> - **`Partially parsed: …`** a `completed` státuszú sor üzenetében: a Semgrep csak az adott
+>   szerkezetet ugrotta át, a fájl többi részét elemezte. A futás teljesnek számít, a lépés zöld; a
+>   `semgrep-coverage.json` és a `summary.md` „Semgrep coverage” része megnevezi a fájlokat.
+> - **`failed`** (`Incomplete analysis: …`): legalább egy fájlt egyáltalán nem tudott értelmezni, vagy
+>   más hiba történt (timeout, szabályhiba). A találatok megmaradnak, de a lista hiányos; ha Sonar is
+>   fut, a `frontend` hatókör segít ([3.2](03-telepites-projektbe.md#további-kérdések)).
 
 ## 5.3 Sonar UI
 

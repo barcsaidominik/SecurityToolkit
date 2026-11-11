@@ -177,6 +177,81 @@ public class SemgrepScannerTests
         }
     }
 
+    // The shape Semgrep CE 1.x wrote for valid C# it could not fully parse (a trailing comma in a
+    // `with` initializer), seen on a real repository: warn level, type = ["PartialParsing", [spans]].
+    private const string PartialParsingError = """
+        { "type": ["PartialParsing", [ { "path": "src/Catalog.cs", "start": { "line": 145, "col": 50 }, "end": { "line": 145, "col": 51 } } ]],
+          "level": "warn", "path": "src/Catalog.cs", "message": "Syntax error at line src/Catalog.cs:145:\n `,` was unexpected" }
+        """;
+
+    [Fact]
+    public async Task RunAsync_OnlyPartialParsingWarnings_CompletesWithNoteAndStillBlocksOnErrorHitsInGate()
+    {
+        var (context, root) = ScanContextTestFactory.Create(config: SemgrepConfig(), @lock: SemgrepLock(), mode: ScanMode.Gate);
+
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "a.cs"), "var x = 1;\n");
+            var runner = new FakeProcessRunner();
+            runner.Enqueue("docker", _ =>
+            {
+                File.WriteAllText(Path.Combine(context.OutputDirectory, "semgrep.json"), $$"""
+                    {
+                      "results": [ { "check_id": "rule1", "path": "a.cs", "start": { "line": 1 }, "end": { "line": 1 }, "extra": { "severity": "ERROR" } } ],
+                      "errors": [ {{PartialParsingError}} ]
+                    }
+                    """);
+                return new ProcessResult(3, "", "");
+            });
+
+            var result = Assert.Single(await new SemgrepScanner(runner, Array.Empty<string>()).RunAsync(context));
+
+            Assert.Equal(ScanStatus.Completed, result.Status);
+            Assert.Equal(1, result.Findings);
+            Assert.True(result.Blocking); // tolerating the parser warning never hides a real ERROR hit
+            Assert.Contains("Partially parsed: 1 file(s) (src/Catalog.cs)", result.Message, StringComparison.Ordinal);
+            var coverage = File.ReadAllText(Path.Combine(context.OutputDirectory, "semgrep-coverage.json"));
+            Assert.Contains("\"partialParsingOnly\": true", coverage);
+            Assert.Contains("\"complete\": false", coverage);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Theory]
+    [InlineData("""{ "type": "Syntax error", "level": "warn", "path": "src/Other.cs" }""")] // whole file skipped
+    [InlineData("""{ "type": "Timeout", "level": "warn", "path": "src/Other.cs" }""")]
+    [InlineData("""{ "type": ["PartialParsing", []], "level": "error", "path": "src/Other.cs" }""")]
+    [InlineData("""{ "path": "src/Other.cs" }""")] // unknown shape
+    public async Task RunAsync_AnyErrorBesidesPartialParsingWarnings_StillFails(string otherError)
+    {
+        var (context, root) = ScanContextTestFactory.Create(config: SemgrepConfig(), @lock: SemgrepLock());
+
+        try
+        {
+            var runner = new FakeProcessRunner();
+            runner.Enqueue("docker", _ =>
+            {
+                File.WriteAllText(Path.Combine(context.OutputDirectory, "semgrep.json"), $$"""
+                    { "results": [], "errors": [ {{PartialParsingError}}, {{otherError}} ] }
+                    """);
+                return new ProcessResult(3, "", "");
+            });
+
+            var result = Assert.Single(await new SemgrepScanner(runner, Array.Empty<string>()).RunAsync(context));
+
+            Assert.Equal(ScanStatus.Failed, result.Status);
+            Assert.StartsWith("Incomplete analysis", result.Message, StringComparison.Ordinal);
+            Assert.Contains("\"partialParsingOnly\": false", File.ReadAllText(Path.Combine(context.OutputDirectory, "semgrep-coverage.json")));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
     private static Dictionary<string, object?> SemgrepConfig() => new()
     {
         ["tools"] = new Dictionary<string, object?> { ["semgrep"] = true },

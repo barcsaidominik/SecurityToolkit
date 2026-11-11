@@ -172,7 +172,7 @@ public static class ScanCommandFactory
                 Console.WriteLine(note);
             }
 
-            Console.WriteLine($"Riportok: {outcome.StatusFilePath}");
+            Console.WriteLine($"Reports: {outcome.StatusFilePath}");
             return outcome.ExitCode;
         });
 

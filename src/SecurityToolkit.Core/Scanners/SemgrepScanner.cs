@@ -3,8 +3,11 @@ namespace SecurityToolkit.Core.Scanners;
 /// <summary>
 /// Semgrep CE scan via the pinned Docker image. Supports the "repository" (everything, including C#) and "frontend" (configured
 /// frontend targets only, *.cs excluded) scopes. Strict-mode parse errors (exit 3) can coexist
-/// with useful findings — those are preserved and a semgrep-coverage.json sidecar is written,
-/// but the overall result stays Failed (incomplete analysis) in both Report and Gate mode; ERROR
+/// with useful findings — those are preserved and a semgrep-coverage.json sidecar is written.
+/// When every error is a warn-level PartialParsing (Semgrep recovered and analyzed the rest of the
+/// file; the CE C# parser trips on valid modern syntax such as a trailing comma in a <c>with</c>
+/// initializer) the result is Completed with a note; any other error (a file not parsed at all, a
+/// timeout, a rule error) keeps it Failed (incomplete analysis) in both Report and Gate mode. ERROR
 /// severity is scanner rule severity, not a universal High/Critical label, and only blocks Gate
 /// mode when at least one ERROR-severity hit exists.
 /// </summary>
@@ -65,7 +68,7 @@ public sealed class SemgrepScanner : IScanner
             arguments.AddRange(targets);
 
             // Strict parsing errors (exit 3) can coexist with useful findings. Preserve those
-            // findings, but keep incomplete analysis a failure in both modes.
+            // findings; only partial parsing is tolerated, any other analysis error is a failure.
             var runResult = await ScannerSupport.RunNativeAsync(
                 _processRunner, context, "docker", arguments, "semgrep.log",
                 allowedExitCodes: new[] { 0, 3 }, cancellationToken: cancellationToken).ConfigureAwait(false);
@@ -83,6 +86,9 @@ public sealed class SemgrepScanner : IScanner
             var scanErrors = ScannerSupport.GetList(data, "errors");
             var fingerprints = ErrorFingerprints(context.Root, hits);
 
+            var scopeLabel = context.SemgrepScope == SemgrepScope.Frontend ? "frontend" : "repository";
+            var blocking = context.Mode == ScanMode.Gate && errorHits > 0;
+
             if (scanErrors.Count > 0 || runResult.ExitCode == 3)
             {
                 var paths = scanErrors
@@ -92,19 +98,31 @@ public sealed class SemgrepScanner : IScanner
                     .Distinct()
                     .OrderBy(p => p, StringComparer.Ordinal)
                     .ToArray();
+                var partialOnly = scanErrors.Count > 0 && scanErrors.All(IsPartialParsingWarning);
 
                 ToolkitJson.WriteFile(Path.Combine(context.OutputDirectory, "semgrep-coverage.json"), new Dictionary<string, object?>
                 {
                     ["schemaVersion"] = 1,
                     ["complete"] = false,
+                    ["partialParsingOnly"] = partialOnly,
                     ["exitCode"] = runResult.ExitCode,
                     ["analysisErrors"] = scanErrors.Count,
                     ["affectedFiles"] = paths,
                     ["findings"] = hits.Count,
                 });
 
-                var scopeLabel = context.SemgrepScope == SemgrepScope.Frontend ? "frontend" : "repository";
-                var blocking = context.Mode == ScanMode.Gate && errorHits > 0;
+                if (partialOnly)
+                {
+                    return new[]
+                    {
+                        new ScanResult(
+                            "semgrep", scopeLabel, ScanStatus.Completed, hits.Count, blocking,
+                            "ERROR is rule severity; not a universal High/Critical risk label. " +
+                            $"Partially parsed: {paths.Length} file(s) ({string.Join(", ", paths)}); Semgrep skipped only the construct it could not parse and analyzed the rest. See semgrep-coverage.json.",
+                            fingerprints),
+                    };
+                }
+
                 return new[]
                 {
                     new ScanResult(
@@ -115,12 +133,10 @@ public sealed class SemgrepScanner : IScanner
                 };
             }
 
-            var completedScopeLabel = context.SemgrepScope == SemgrepScope.Frontend ? "frontend" : "repository";
-            var completedBlocking = context.Mode == ScanMode.Gate && errorHits > 0;
             return new[]
             {
                 new ScanResult(
-                    "semgrep", completedScopeLabel, ScanStatus.Completed, hits.Count, completedBlocking,
+                    "semgrep", scopeLabel, ScanStatus.Completed, hits.Count, blocking,
                     "ERROR is rule severity; not a universal High/Critical risk label.",
                     fingerprints),
             };
@@ -129,6 +145,28 @@ public sealed class SemgrepScanner : IScanner
         {
             return new[] { new ScanResult("semgrep", "repository", ScanStatus.Failed, null, Blocking: false, ex.Message) };
         }
+    }
+
+    /// <summary>
+    /// A warn-level PartialParsing error: Semgrep skipped one construct and analyzed the rest of the
+    /// file. Its "type" is either the bare name or a ["PartialParsing", [spans]] pair.
+    /// </summary>
+    private static bool IsPartialParsingWarning(object? error)
+    {
+        if (error is not IDictionary<string, object?> e || ScannerSupport.GetString(e, "level") != "warn")
+        {
+            return false;
+        }
+
+        var type = e.TryGetValue("type", out var raw) ? raw : null;
+        var name = type switch
+        {
+            string s => s,
+            IReadOnlyList<object?> { Count: > 0 } list => list[0] as string,
+            IList<object?> { Count: > 0 } list => list[0] as string,
+            _ => null,
+        };
+        return name == "PartialParsing";
     }
 
     /// <summary>

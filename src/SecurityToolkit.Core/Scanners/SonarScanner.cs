@@ -56,7 +56,7 @@ public sealed class SonarScanner : IScanner
         {
             if (string.IsNullOrEmpty(context.SonarToken))
             {
-                throw new InvalidOperationException("Set SONAR_TOKEN. Server token is never written into toolkit.json.");
+                throw new InvalidOperationException("Set the SONAR_TOKEN environment variable; the token is never read from or written to the config files.");
             }
 
             var sonarScannerTool = ScannerSupport.GetDictionary(context.Lock, "tools") is { } tools

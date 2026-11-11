@@ -389,8 +389,9 @@ A triage.md DÖNTÉS oszlopa kitöltve. Kezdd ezekkel: <G02, G05>. Csoportonkén
   gyakran csak a PR pipeline-ja igazolja.
 - **Tranzitív függőségek:** a javítás sokszor egy közvetlen függőség frissítése vagy explicit
   `PackageReference`/`overrides`; az agentnek meg kell mutatnia, melyik közvetlen függőség húzza be.
-- A **Semgrep `failed`** állapota (parse-hiba) azt jelenti, hogy a lista nem teljes; az ilyen
-  fájlokra a triázs nem ad teljes képet ([5.2](05-kiertekeles.md#52-eszközönként-hol-a-részlet-mit-jelent)).
+- A **Semgrep `failed`** állapota azt jelenti, hogy a lista nem teljes (egy fájl kimaradt, vagy más
+  hiba volt); a `completed` mellett álló `Partially parsed` fájlokban pedig egy-egy szerkezetet nem
+  elemzett. Ezekre a fájlokra a triázs nem ad teljes képet ([5.2](05-kiertekeles.md#52-eszközönként-hol-a-részlet-mit-jelent)).
 - Az LLM **téved**: a javaslatai (különösen a `téves riasztás`) ellenőrizendők, és a javításai
   ugyanazt a code review-t igénylik, mint bármely más változtatás.
 

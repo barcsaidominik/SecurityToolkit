@@ -194,8 +194,11 @@ public static class ScanReportFormatter
         lines.Add("");
         lines.Add("## Semgrep coverage");
         lines.Add("");
-        lines.Add($"Incomplete analysis: {analysisErrors} parser error(s) across {affectedFiles} file(s). " +
-            "Findings from successfully-parsed files are preserved above; parser errors do not prove invalid application code.");
+        lines.Add(ScannerSupport.GetBool(data, "partialParsingOnly")
+            ? $"Partially parsed: {affectedFiles} file(s) had a construct Semgrep could not parse ({analysisErrors} warning(s)); " +
+              "it skipped only that construct and analyzed the rest, so the run counts as complete. Parser warnings do not prove invalid application code."
+            : $"Incomplete analysis: {analysisErrors} parser error(s) across {affectedFiles} file(s). " +
+              "Findings from successfully-parsed files are preserved above; parser errors do not prove invalid application code.");
     }
 
     private static (string ColorCode, string ResetCode) ConsoleColorFor(string status, bool blocking)
