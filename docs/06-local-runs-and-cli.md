@@ -204,7 +204,7 @@ security-toolkit <command> --help
 | `versions.<tool>` | the requested version of DevSkim/SonarScanner/dotnet-coverage; empty = the latest stable, pinned during installation |
 | `sonar.url`, `sonar.projectKey`, `sonar.dotnetTarget` | the Sonar connection and the solution it builds |
 | `sonar.coverage`, `sonar.testFilter`, `sonar.testEnvironment` | coverage import ([3.5](03-project-installation.md#35-sonar-coverage)) |
-| `devskim.ignoreGlobs` | additional file patterns excluded from DevSkim, e.g. `["**/*.Tests/**"]` (no commas allowed) |
+| `devskim.ignoreGlobs` | additional file patterns excluded from DevSkim, e.g. `["**/*.Tests/**"]` (no commas allowed). Always excluded: `.git`, `.security`, `bin`, `obj`, `node_modules`, `dist`, `.sonarqube` and the generated pipeline files |
 | `devskim.ignoreRuleIds` | disabled DevSkim rules, e.g. `["DS162092", "DS172411", "DS176209"]` (localhost, setTimeout, TODO) |
 | `installHook`, `installVSCodeExtensions` | git hook, VS Code extensions |
 | `installPrerequisites`, `sdkChannel`, `nodeWingetId`, `nodeVersion` | install a missing SDK/Node with winget (Windows only; on Linux it only reports what is missing) |

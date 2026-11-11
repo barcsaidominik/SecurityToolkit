@@ -37,6 +37,8 @@ public sealed class DevSkimScanner : IScanner
             var sarifPath = Path.Combine(context.OutputDirectory, "devskim.sarif");
 
             // .sonarqube/ is SonarScanner's work dir (left behind by a local Sonar run, like for Gitleaks).
+            // The generated pipelines are the toolkit's own owned files: with toolkitRelease they carry
+            // the pinned SHA-256 checksums, which DS173237 reports as keys in every target project.
             // devskim.ignoreGlobs / ignoreRuleIds (validated at install) narrow the run on top of the
             // fixed exclusions; a config from before these keys existed simply has none.
             var settings = ScannerSupport.GetDictionary(context.Config, "devskim");
@@ -47,7 +49,11 @@ public sealed class DevSkimScanner : IScanner
             {
                 "analyze", "--source-code", context.Root, "--output-file", sarifPath,
                 "--file-format", "sarif", "--skip-excerpts", "--ignore-globs",
-                string.Join(',', new[] { "**/.git/**", "**/.security/**", "**/bin/**", "**/obj/**", "**/node_modules/**", "**/dist/**", "**/.sonarqube/**" }.Concat(extraGlobs)),
+                string.Join(',', new[]
+                {
+                    "**/.git/**", "**/.security/**", "**/bin/**", "**/obj/**", "**/node_modules/**", "**/dist/**", "**/.sonarqube/**",
+                    "**/azure-security-toolkit.yml", "**/.github/workflows/security-toolkit.yml",
+                }.Concat(extraGlobs)),
             };
             if (ignoredRules.Count > 0)
             {

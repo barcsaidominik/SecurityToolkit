@@ -203,7 +203,7 @@ security-toolkit <parancs> --help
 | `versions.<eszköz>` | a DevSkim/SonarScanner/dotnet-coverage kért verziója; üres = a legújabb stabil, telepítéskor rögzítve |
 | `sonar.url`, `sonar.projectKey`, `sonar.dotnetTarget` | a Sonar-kapcsolat és a buildelt solution |
 | `sonar.coverage`, `sonar.testFilter`, `sonar.testEnvironment` | coverage-import ([3.5](03-telepites-projektbe.md#35-sonar-coverage)) |
-| `devskim.ignoreGlobs` | további kizárt fájlminták a DevSkimnek, pl. `["**/*.Tests/**"]` (vessző nem lehet benne) |
+| `devskim.ignoreGlobs` | további kizárt fájlminták a DevSkimnek, pl. `["**/*.Tests/**"]` (vessző nem lehet benne). Mindig kizárva: `.git`, `.security`, `bin`, `obj`, `node_modules`, `dist`, `.sonarqube` és a generált pipeline-fájlok |
 | `devskim.ignoreRuleIds` | letiltott DevSkim-szabályok, pl. `["DS162092", "DS172411", "DS176209"]` (localhost, setTimeout, TODO) |
 | `installHook`, `installVSCodeExtensions` | git hook, VS Code extensionök |
 | `installPrerequisites`, `sdkChannel`, `nodeWingetId`, `nodeVersion` | hiányzó SDK/Node telepítése wingettel (csak Windowson; Linuxon csak jelzi a hiányt) |

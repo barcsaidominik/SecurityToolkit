@@ -65,6 +65,9 @@ public class DevSkimScannerTests
             Assert.StartsWith("**/.git/**,", globs);
             Assert.EndsWith(",**/*.Tests/**", globs);
             Assert.Contains("**/.sonarqube/**", globs);
+            // The generated pipelines (toolkitRelease checksums look like keys to DS173237).
+            Assert.Contains("**/azure-security-toolkit.yml", globs);
+            Assert.Contains("**/.github/workflows/security-toolkit.yml", globs);
             Assert.Equal("DS162092,DS176209", arguments[arguments.IndexOf("--ignore-rule-ids") + 1]);
         }
         finally
