@@ -221,6 +221,67 @@ public class GitleaksScannerTests
         }
     }
 
+    [Theory]
+    [InlineData("{}", 0)]
+    [InlineData("""{"findings":[{"RuleID":"x"}]}""", 10)]
+    [InlineData("null", 0)]
+    [InlineData("[]", 10)]
+    public async Task RunAsync_MalformedOrInconsistentReport_FailsInsteadOfReportingClean(string report, int exitCode)
+    {
+        var (context, root) = ScanContextTestFactory.Create(
+            config: GitleaksConfig(),
+            @lock: GitleaksLock(),
+            mode: ScanMode.Gate);
+
+        try
+        {
+            var runner = new FakeProcessRunner();
+            runner.Enqueue("docker", _ =>
+            {
+                File.WriteAllText(Path.Combine(context.OutputDirectory, "gitleaks.json"), report);
+                return new ProcessResult(exitCode, "", "");
+            });
+
+            var result = Assert.Single(await new GitleaksScanner(runner, Array.Empty<string>()).RunAsync(context));
+
+            Assert.Equal(ScanStatus.Failed, result.Status);
+            Assert.Null(result.Findings);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task RunAsync_CleanReport_Completes()
+    {
+        var (context, root) = ScanContextTestFactory.Create(
+            config: GitleaksConfig(),
+            @lock: GitleaksLock(),
+            mode: ScanMode.Gate);
+
+        try
+        {
+            var runner = new FakeProcessRunner();
+            runner.Enqueue("docker", _ =>
+            {
+                File.WriteAllText(Path.Combine(context.OutputDirectory, "gitleaks.json"), "[]");
+                return new ProcessResult(0, "", "");
+            });
+
+            var result = Assert.Single(await new GitleaksScanner(runner, Array.Empty<string>()).RunAsync(context));
+
+            Assert.Equal(ScanStatus.Completed, result.Status);
+            Assert.Equal(0, result.Findings);
+            Assert.False(result.Blocking);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
     private static Dictionary<string, object?> GitleaksConfig() => new()
     {
         ["tools"] = new Dictionary<string, object?> { ["gitleaks"] = true },

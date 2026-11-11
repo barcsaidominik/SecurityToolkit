@@ -69,7 +69,7 @@ public sealed class GitleaksScanner : IScanner
                 arguments.AddRange(new[] { "--pre-commit", "--staged" });
             }
 
-            await ScannerSupport.RunNativeAsync(
+            var runResult = await ScannerSupport.RunNativeAsync(
                 _processRunner, context, "docker", arguments, "gitleaks.log",
                 allowedExitCodes: new[] { 0, 10 }, cancellationToken: cancellationToken).ConfigureAwait(false);
 
@@ -77,6 +77,18 @@ public sealed class GitleaksScanner : IScanner
             if (!File.Exists(reportPath))
             {
                 throw new FileNotFoundException($"Missing report: {reportPath}", reportPath);
+            }
+
+            // Fail closed: a report that is not a hit array, or "leaks found" (exit 10) with no
+            // hit in the report, must not read as a clean secret scan.
+            if (System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(reportPath)) is not System.Text.Json.Nodes.JsonArray reportHits)
+            {
+                throw new InvalidOperationException("Invalid Gitleaks JSON report: expected an array of findings.");
+            }
+
+            if (runResult.ExitCode == 10 && reportHits.Count == 0)
+            {
+                throw new InvalidOperationException("Gitleaks exit 10 without findings in the report: treat as a scanner error.");
             }
 
             var fingerprints = Fingerprints(reportPath);
