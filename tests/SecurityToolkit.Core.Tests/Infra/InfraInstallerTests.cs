@@ -24,7 +24,54 @@ public class InfraInstallerTests : IDisposable
         Directory.Delete(Path.GetDirectoryName(_legacy)!, recursive: true);
     }
 
-    private InfraInstaller Create(FakeProcessRunner runner) => new(runner, _infra, _legacy);
+    // The host check reads /proc on Linux; tests pin it so the result never depends on the machine.
+    private InfraInstaller Create(FakeProcessRunner runner, long? maxMapCount = null)
+        => new(runner, _infra, _legacy, () => maxMapCount);
+
+    [Fact]
+    public async Task InstallAsync_SonarWithTooLowMaxMapCount_RefusesBeforeWritingAnything()
+    {
+        var runner = new FakeProcessRunner();
+
+        var outcome = await Create(runner, maxMapCount: 65530).InstallAsync(new InfraInstallOptions(Sonar: true, Mssql: false));
+
+        Assert.Equal(2, outcome.ExitCode);
+        var message = Assert.Single(outcome.Messages);
+        Assert.Contains("vm.max_map_count = 65530", message, StringComparison.Ordinal);
+        Assert.Contains("sudo sysctl -w vm.max_map_count=262144", message, StringComparison.Ordinal);
+        Assert.Empty(runner.Calls);
+        Assert.False(Directory.Exists(Path.Combine(_infra, "sonar")));
+    }
+
+    [Theory]
+    [InlineData(262144L)]
+    [InlineData(1048576L)]
+    public async Task InstallAsync_SonarWithSufficientMaxMapCount_Starts(long maxMapCount)
+    {
+        var runner = new FakeProcessRunner();
+        runner.Enqueue("docker", new ProcessResult(1, "", "no such volume")); // volume inspect
+        EnqueuePin(runner, SonarDigest);
+        EnqueuePin(runner, PostgresDigest);
+        EnqueueRestrict(runner);
+        runner.Enqueue("docker", new ProcessResult(0, "", "")); // compose up
+
+        var outcome = await Create(runner, maxMapCount).InstallAsync(new InfraInstallOptions(Sonar: true, Mssql: false));
+
+        Assert.Equal(0, outcome.ExitCode);
+    }
+
+    [Fact]
+    public async Task InstallAsync_MssqlOnly_IgnoresMaxMapCount()
+    {
+        var runner = new FakeProcessRunner();
+        EnqueuePin(runner, MssqlDigest);
+        EnqueueRestrict(runner);
+        runner.Enqueue("docker", new ProcessResult(0, "", "")); // compose up
+
+        var outcome = await Create(runner, maxMapCount: 65530).InstallAsync(new InfraInstallOptions(Sonar: false, Mssql: true));
+
+        Assert.Equal(0, outcome.ExitCode);
+    }
 
     private static void EnqueuePin(FakeProcessRunner runner, string digest)
     {

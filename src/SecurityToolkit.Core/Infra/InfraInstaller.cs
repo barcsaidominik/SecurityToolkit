@@ -42,14 +42,42 @@ public sealed class InfraInstaller
     private readonly IProcessRunner _processRunner;
     private readonly string _infraDirectory;
     private readonly string _legacySonarDirectory;
+    private readonly Func<long?> _readMaxMapCount;
+
+    /// <summary>Elasticsearch (inside SonarQube) refuses to start below this vm.max_map_count.</summary>
+    public const long RequiredMaxMapCount = 262144;
 
     /// <param name="infraDirectory">Override for tests; defaults to <see cref="ResolveInfraDirectory"/>.</param>
     /// <param name="legacySonarDirectory">Override for tests; defaults to <see cref="ResolveLegacySonarDirectory"/>.</param>
-    public InfraInstaller(IProcessRunner processRunner, string? infraDirectory = null, string? legacySonarDirectory = null)
+    /// <param name="readMaxMapCount">Override for tests; defaults to <see cref="ReadHostMaxMapCount"/>.</param>
+    public InfraInstaller(
+        IProcessRunner processRunner, string? infraDirectory = null, string? legacySonarDirectory = null, Func<long?>? readMaxMapCount = null)
     {
         _processRunner = processRunner;
         _infraDirectory = infraDirectory ?? ResolveInfraDirectory();
         _legacySonarDirectory = legacySonarDirectory ?? ResolveLegacySonarDirectory();
+        _readMaxMapCount = readMaxMapCount ?? ReadHostMaxMapCount;
+    }
+
+    /// <summary>
+    /// The Linux host's vm.max_map_count, which Docker containers share. Null where it cannot be
+    /// checked from here: on Windows/macOS Docker runs in its own VM (Docker Desktop configures it).
+    /// </summary>
+    public static long? ReadHostMaxMapCount()
+    {
+        if (!OperatingSystem.IsLinux())
+        {
+            return null;
+        }
+
+        try
+        {
+            return long.TryParse(File.ReadAllText("/proc/sys/vm/max_map_count").Trim(), out var value) ? value : null;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return null;
+        }
     }
 
     /// <summary>
@@ -166,6 +194,18 @@ public sealed class InfraInstaller
 
     private async Task InstallSonarAsync(InfraInstallOptions options, List<string> messages, CancellationToken cancellationToken)
     {
+        // Checked before anything is written: below the limit the container starts, then
+        // Elasticsearch's bootstrap check stops Sonar, and it restarts in a loop (restart: unless-stopped).
+        // A kernel setting of the whole machine, so the toolkit reports it and never changes it.
+        if (_readMaxMapCount() is { } maxMapCount && maxMapCount < RequiredMaxMapCount)
+        {
+            throw new InvalidOperationException(
+                $"vm.max_map_count = {maxMapCount}, a SonarQube (Elasticsearch) legalább {RequiredMaxMapCount}-et kér, különben nem indul el. " +
+                $"Beállítás: sudo sysctl -w vm.max_map_count={RequiredMaxMapCount}, tartósan: " +
+                $"echo 'vm.max_map_count={RequiredMaxMapCount}' | sudo tee /etc/sysctl.d/99-security-toolkit-sonar.conf. " +
+                "Utána futtasd újra az infra telepítését.");
+        }
+
         Directory.CreateDirectory(SonarDirectory);
         WriteTemplate("sonar.compose.yml", Path.Combine(SonarDirectory, "compose.yml"));
 

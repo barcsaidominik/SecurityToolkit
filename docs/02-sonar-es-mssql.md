@@ -51,6 +51,17 @@ C:\ProgramData\SecurityToolkit\infra\
 - **Linuxon** ugyanez a `/var/lib/security-toolkit/infra/` alatt van (`sonar/`, `mssql/`), a `.env`
   root tulajdonú és `chmod 600`. Az `infra` parancsokat ezért `sudo`-val futtasd. A lenti
   `C:\ProgramData\SecurityToolkit\infra\...` útvonalak helyett ezt használd.
+- **Linuxon a Sonarhoz `vm.max_map_count` ≥ 262144 kell** (a Sonar beépített Elasticsearch-e ez alatt
+  nem indul el, a konténer pedig újraindítási hurokba kerül). Az Ubuntu 26.04 alapból 1048576-ot ad,
+  sok más disztró csak 65530-at. Az `infra install --sonar` ezt indulás előtt ellenőrzi, és kevés értéknél
+  semmit nem ír, hanem megáll (exit 2) a beállítás parancsával. A rendszerparamétert a toolkit nem
+  állítja át magától:
+  ```bash
+  sudo sysctl -w vm.max_map_count=262144
+  echo 'vm.max_map_count=262144' | sudo tee /etc/sysctl.d/99-security-toolkit-sonar.conf
+  ```
+  Windowson a Docker Desktop saját VM-et futtat, ott ezt a Docker Desktop állítja be, a toolkit nem
+  ellenőrzi.
 - **A `.env`-ben lévő értékek (jelszavak, image-pinek) soha nem változnak meg maguktól.** Ha egy
   értéket kézzel módosítasz (pl. `SONAR_MEM_LIMIT=6g`), a következő `infra install` megtartja.
 - A compose-projektnevek fixek: `security-toolkit-sonar` és `security-toolkit-mssql`. A Sonar

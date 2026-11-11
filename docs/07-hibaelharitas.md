@@ -60,6 +60,7 @@ A tünet szerint keresd ki a hibát. Szinte mindegyik élesben előfordult már.
 | Tünet | Ok | Megoldás |
 |---|---|---|
 | `infra install` megtagadja: a `security-toolkit-sonar_postgres_data` volume létezik, de nincs `.env` | elveszett a `.env`, és új jelszóval a Sonar kizárná magát a saját adatbázisából | a `.env` visszaállítása a mentésből, vagy (minden adat elvesztésével) a volume törlése ([2.5](02-sonar-es-mssql.md#25-frissítés-mentés-átköltözés)) |
+| Linuxon `infra install --sonar`: `vm.max_map_count = 65530 …` | a kernel-limit kisebb, mint amit a Sonar Elasticsearch-e kér | a hibaüzenetben lévő `sysctl` parancs, majd az infra telepítésének újrafuttatása ([2.1](02-sonar-es-mssql.md#21-telepítés)) |
 | Frissítés után a Sonar karbantartási módban van | adatbázis-migráció kell | `http://<sonar>:9000/setup` |
 | `docker compose up failed` | foglalt port, kevés memória, vagy nem fut a Docker | `docker compose logs` a compose-mappában ([2.4](02-sonar-es-mssql.md#24-napi-üzemeltetés)) |
 
