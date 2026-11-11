@@ -210,6 +210,45 @@ public class ExitCodeTests : IDisposable
     }
 
     [Fact]
+    public async Task Entry_ScanWithoutSecurityConfig_ExitsTwoWithOneLineError()
+    {
+        // Exit 1 would read as "blocking findings" in a pipeline; a missing config is a technical error.
+        var error = new StringWriter();
+
+        var exitCode = await CliApp.InvokeAsync(new[] { "scan", "--project-root", _root }, error);
+
+        Assert.Equal(2, exitCode);
+        var message = error.ToString();
+        Assert.StartsWith("Error: ", message, StringComparison.Ordinal);
+        Assert.Contains("security.config.json", message, StringComparison.Ordinal);
+        Assert.DoesNotContain("   at ", message, StringComparison.Ordinal);
+        Assert.Single(message.Split('\n', StringSplitOptions.RemoveEmptyEntries));
+    }
+
+    [Fact]
+    public async Task Entry_RestoreWithMissingManifest_ExitsTwo()
+    {
+        var error = new StringWriter();
+
+        var exitCode = await CliApp.InvokeAsync(
+            new[] { "restore", "--project-root", _root, "--manifest", Path.Combine(_root, "missing.json") }, error);
+
+        Assert.Equal(2, exitCode);
+        Assert.Contains("missing.json", error.ToString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Entry_PassesThroughCommandAndParseErrorExitCodes()
+    {
+        var error = new StringWriter();
+
+        Assert.Equal(0, await CliApp.InvokeAsync(new[] { "install", "--project-root", _root, "--dry-run", "--non-interactive" }, error));
+        Assert.Equal(2, await CliApp.InvokeAsync(new[] { "report", "--project-root", _root }, error));
+        Assert.Equal(1, await CliApp.InvokeAsync(new[] { "scan" }, error)); // parse error: missing --project-root
+        Assert.DoesNotContain("Error: ", error.ToString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task Report_NoScanRunYet_ExitsTwo()
     {
         var root = CliApp.BuildRootCommand();

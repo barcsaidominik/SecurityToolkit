@@ -179,6 +179,14 @@ security-toolkit --version
 security-toolkit <parancs> --help
 ```
 
+**Kilépési kódok** (minden parancsra, a pipeline-ok erre épülnek):
+
+| Kód | Jelentés |
+|---|---|
+| `0` | siker (Report módban találatok mellett is) |
+| `1` | Gate módban blokkoló találat; ill. hibás parancssor (ismeretlen kapcsoló, hiányzó kötelező paraméter), ilyenkor a súgó is megjelenik |
+| `2` | technikai vagy konfigurációs hiba, pl. nincs `.security/security.config.json` (még nem futott `install`), hiányzó manifest, elérhetetlen Docker. Az ok egy `Error: …` sorban jelenik meg a hibakimeneten |
+
 ## 6.4 A `security.config.json` kulcsai
 
 | Kulcs | Jelentés |

@@ -15,8 +15,7 @@ catch (IOException)
     // No console attached (redirected/piped stdin or stdout) — nothing to do.
 }
 
-// The external Azure pipeline relies on the process exit code, not stdout content:
-// ParseResult.InvokeAsync already propagates a command action's returned int (0/1/2, per each
-// command's own ScanOutcome/InstallOutcome/RestoreOutcome contract), or a non-zero code on a
-// parse error, so no separate mapping is needed here.
-return await CliApp.BuildRootCommand().Parse(args).InvokeAsync();
+// The external pipelines rely on the process exit code, not stdout content: a command action's
+// returned int (0/1/2, per each command's own ScanOutcome/InstallOutcome/RestoreOutcome contract),
+// System.CommandLine's non-zero code on a parse error, and 2 for an exception that escapes a command.
+return await CliApp.InvokeAsync(args);

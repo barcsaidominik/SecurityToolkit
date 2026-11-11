@@ -116,7 +116,7 @@ jelenik meg:
 | | Report (alapértelmezés) | Gate |
 |---|---|---|
 | Találat esetén | exit 0, a lépés zöld | **exit 1** blokkoló találatnál |
-| Technikai hiba | exit 2 | exit 2 |
+| Technikai hiba (pl. hiányzó config, elbukott eszköz) | exit 2 | exit 2 |
 | Sonar | csak feltölt | megvárja a Quality Gate-et; ha bukik, a lépés is elbukik |
 | Hol használd | CI-pipeline (a generált pipeline alapból ezt használja), rendszeres riport | helyi ellenőrzés kiadás előtt, a generált pipeline `pipelineMode: "Gate"` mellett, egyedi pipeline-ok |
 
