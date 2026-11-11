@@ -72,10 +72,10 @@ ephemeral agents.
 
 ## Documentation
 
-The detailed installation and operations guide is currently in Hungarian:
-**[docs/README.md](docs/README.md)**. It goes from an empty machine to a green pipeline:
-preparing the CI machine and agent, the shared Sonar and SQL Server, installing into a project,
-the pipeline, triaging the results, the full CLI reference and troubleshooting.
+**[Installation and operations guide →](docs/README.md)**: from an empty machine to a green
+pipeline: preparing the CI machine and agent, the shared Sonar and SQL Server, installing into a
+project, the pipeline, triaging the results, the full CLI reference, troubleshooting and
+LLM-assisted remediation. A Hungarian translation is in [docs/hu/](docs/hu/README.md).
 
 ## Building from source
 

@@ -1,5 +1,7 @@
 # 5. Az eredmények kiértékelése és a triázs
 
+[English](../05-evaluation.md) · **Magyar**
+
 [← 4. Pipeline](04-pipeline.md) · [Tartalomjegyzék](README.md) · [Következő: 6. Helyi futtatás és CLI →](06-helyi-futtatas-es-cli.md)
 
 Egy futás után az eredményt három helyen látod:

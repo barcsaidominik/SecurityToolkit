@@ -74,7 +74,7 @@ agenten is letölti és ellenőrzi a CLI-t.
 
 ## Dokumentáció
 
-**[Telepítési és üzemeltetési útmutató →](docs/README.md)**: nulláról a zöld pipeline-ig, a
+**[Telepítési és üzemeltetési útmutató →](docs/hu/README.md)**: nulláról a zöld pipeline-ig, a
 CI-gép előkészítésétől a közös Sonaron és SQL Serveren, a projekt-telepítésen és a pipeline-on át a
 találatok triázsáig, teljes CLI-referenciával és hibaelhárítással.
 

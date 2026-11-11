@@ -22,8 +22,10 @@ cc91663eb2c9271bb8ccbfbe4fab386eeaf695a9:tests/SecurityToolkit.Core.Tests/Scanne
 cc91663eb2c9271bb8ccbfbe4fab386eeaf695a9:tests/SecurityToolkit.Core.Tests/Scanners/GitleaksScannerTests.cs:aws-access-token:146
 
 # working tree
-docs/02-sonar-es-mssql.md:curl-auth-user:128
-docs/07-hibaelharitas.md:curl-auth-user:38
+docs/02-sonar-and-mssql.md:curl-auth-user:128
+docs/07-troubleshooting.md:curl-auth-user:41
+docs/hu/02-sonar-es-mssql.md:curl-auth-user:130
+docs/hu/07-hibaelharitas.md:curl-auth-user:41
 src/SecurityToolkit.Core/Infra/InfraInstaller.cs:generic-api-key:40
 tests/SecurityToolkit.Core.Tests/Scanners/GitleaksScannerTests.cs:aws-access-token:25
 tests/SecurityToolkit.Core.Tests/Scanners/GitleaksScannerTests.cs:aws-access-token:26

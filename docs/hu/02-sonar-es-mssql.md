@@ -1,5 +1,7 @@
 # 2. A közös Sonar és a teszt-SQL Server
 
+[English](../02-sonar-and-mssql.md) · **Magyar**
+
 [← 1. CI-gép és agent](01-gep-es-agent.md) · [Tartalomjegyzék](README.md) · [Következő: 3. Telepítés projektbe →](03-telepites-projektbe.md)
 
 A toolkit két **gépi szintű**, projektfüggetlen szolgáltatást kezel Dockerben:

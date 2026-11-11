@@ -1,81 +1,84 @@
-# SecurityToolkit – telepítési és üzemeltetési útmutató
+# SecurityToolkit – installation and operations guide
 
-Ez az útmutató egy **üres Windows (vagy Linux) gépről és egy üres Azure DevOps projektből** indulva
-végigvezet mindenen, ami egy zöld biztonsági pipeline-hoz kell. A fejezeteket sorrendben kell követni, mert
-egymásra épülnek. Minden lépés végén van egy **Ellenőrzés** pont: csak akkor menj tovább, ha az
-teljesül.
+**English** · [Magyar](hu/README.md)
 
-## Mi ez a rendszer?
+Starting from **an empty Windows (or Linux) machine and an empty Azure DevOps project**, this guide walks
+you through everything a green security pipeline needs. Follow the chapters in order, as each builds on
+the previous one. Every step ends with a **Check** item: move on only once it holds.
 
-A SecurityToolkit egy projektfüggetlen biztonsági scanner-csomag .NET és Angular repókhoz. Három
-rétegből áll:
+## What is this system?
+
+SecurityToolkit is a project-independent security scanning toolkit for .NET and Angular repositories. It
+has three layers:
 
 ```
-┌──────────────────────────────────── CI-gép ───────────────────────────────────────┐
+┌──────────────────────────────────── CI machine ───────────────────────────────────┐
 │                                                                                   │
 │  security-toolkit  (Windows: C:\Program Files\SecurityToolkit\bin,                │
-│                     Linux: /opt/security-toolkit/bin; gépi PATH-on)               │
+│                     Linux: /opt/security-toolkit/bin; on the machine PATH)        │
 │        ▲                                                                          │
-│        │ hívja                                                                    │
-│  Azure DevOps self-hosted agent (Windows- vagy systemd-szolgáltatás)              │
+│        │ calls                                                                    │
+│  Azure DevOps self-hosted agent (Windows or systemd service)                      │
 │                                                                                   │
-│  Docker ──► közös SonarQube + PostgreSQL   (minden projekt egy szervert           │
-│         ──► közös teszt-SQL Server          használ, saját kulccsal/              │
-│                                             saját loginnal)                       │
-│         ──► scanner-konténerek (Semgrep, Gitleaks, OSV)                           │
+│  Docker ──► shared SonarQube + PostgreSQL  (every project uses one server,        │
+│         ──► shared test SQL Server          with its own key / its own login)     │
+│         ──► scanner containers (Semgrep, Gitleaks, OSV)                           │
 └───────────────────────────────────────────────────────────────────────────────────┘
 
-┌───────────────────────────── célprojekt (bármely repo) ───────────────────────────┐
-│  .security/                    konfiguráció, lock, szabályok                      │
-│  azure-security-toolkit.yml    generált pipeline                                  │
-│  managed blokkok               .gitignore, .semgrepignore, Directory.Build.props, │
+┌───────────────────────────── target project (any repo) ───────────────────────────┐
+│  .security/                    configuration, lock, rules                         │
+│  azure-security-toolkit.yml    generated pipeline                                 │
+│  managed blocks                .gitignore, .semgrepignore, Directory.Build.props, │
 │                                .editorconfig                                      │
 └───────────────────────────────────────────────────────────────────────────────────┘
 ```
 
-1. **A CLI** (`security-toolkit`): gépenként egyszer telepítjük az `install.bat`-tal (Linuxon az
-   `install.sh`-val). Ugyanez a
-   CLI telepít a projektekbe, futtatja a scaneket és kezeli a gépi infrát.
-2. **A gépi infra**: a közös SonarQube-szerver és egy teszt-SQL Server, Dockerben. Gépenként
-   egyszer, szintén az `install.bat` / `install.sh` telepíti.
-3. **A projekt-telepítés**: a `security-toolkit install` a célprojektbe generálja a `.security/`
-   mappát és a pipeline-t. Ez repónként egyszer kell, utána commitolni.
+1. **The CLI** (`security-toolkit`): installed once per machine with `install.bat` (`install.sh` on
+   Linux). The same CLI installs into projects, runs the scans and manages the machine-level infra.
+2. **The machine-level infra**: the shared SonarQube server and a test SQL Server, in Docker. Once per
+   machine, also installed by `install.bat` / `install.sh`.
+3. **The project installation**: `security-toolkit install` generates the `.security/` folder and the
+   pipeline in the target project. Once per repository, then commit it.
 
-A futtatható eszközök: .NET analyzerek, NuGet audit, npm audit, Semgrep, Gitleaks, OSV-Scanner,
-DevSkim és SonarQube (coverage-dzsel). Részletesen: [06 – Helyi futtatás és CLI-referencia](06-helyi-futtatas-es-cli.md#62-a-8-scanner).
+The tools it runs: .NET analyzers, NuGet audit, npm audit, Semgrep, Gitleaks, OSV-Scanner, DevSkim and
+SonarQube (with coverage). In detail: [06 – Local runs and CLI reference](06-local-runs-and-cli.md#62-the-8-scanners).
 
-## Fejezetek
+## Chapters
 
-| # | Fejezet | Kinek | Gyakoriság |
+| # | Chapter | For | How often |
 |---|---|---|---|
-| 1 | [CI-gép előkészítése és az Azure DevOps agent](01-gep-es-agent.md) | üzemeltető | gépenként egyszer |
-| 2 | [A közös Sonar és a teszt-SQL Server](02-sonar-es-mssql.md) | üzemeltető | gépenként egyszer + karbantartás |
-| 3 | [Telepítés egy célprojektbe](03-telepites-projektbe.md) | fejlesztő | repónként egyszer + frissítéskor |
-| 4 | [A pipeline beállítása és indítása](04-pipeline.md) | fejlesztő | repónként egyszer |
-| 5 | [Az eredmények kiértékelése és a triázs](05-kiertekeles.md) | biztonsági felelős, fejlesztő | minden futás után |
-| 6 | [Helyi futtatás és teljes CLI-referencia](06-helyi-futtatas-es-cli.md) | fejlesztő | igény szerint |
-| 7 | [Hibaelhárítás](07-hibaelharitas.md) | mindenki | ha valami nem megy |
-| 8 | [LLM-támogatott kiértékelés és javítás](08-llm-tamogatott-javitas.md) | fejlesztő + kódoló agent | a találatok rendszeres feldolgozásakor |
+| 1 | [Preparing the CI machine and the Azure DevOps agent](01-machine-and-agent.md) | operator | once per machine |
+| 2 | [The shared Sonar and the test SQL Server](02-sonar-and-mssql.md) | operator | once per machine + maintenance |
+| 3 | [Installing into a target project](03-project-installation.md) | developer | once per repository + on updates |
+| 4 | [Setting up and running the pipeline](04-pipeline.md) | developer | once per repository |
+| 5 | [Evaluating the results and triage](05-evaluation.md) | security owner, developer | after every run |
+| 6 | [Local runs and the full CLI reference](06-local-runs-and-cli.md) | developer | as needed |
+| 7 | [Troubleshooting](07-troubleshooting.md) | everyone | when something does not work |
+| 8 | [LLM-assisted evaluation and remediation](08-llm-assisted-remediation.md) | developer + coding agent | when working through findings regularly |
 
-## Gyors útvonal (a teljes folyamat egy oldalon)
+## Quick path (the whole process on one page)
 
-1. CI-gép: Docker Desktop, .NET SDK, Node, Git, Chrome → `install.bat --sonar --mssql`
-   rendszergazdaként → Azure DevOps agent telepítése szolgáltatásként → az agent-szolgáltatás
-   újraindítása. Linuxon: Docker Engine, `sudo bash install.sh --sonar --mssql`, agent
-   `svc.sh`-val. ([1. fejezet](01-gep-es-agent.md))
-2. Sonar: első belépés, jelszócsere, projekt létrehozása **kézzel**, project analysis token a
-   pipeline-nak; a fejlesztőknek *Execute Analysis* jog, helyben mindenki a saját user tokenjét használja.
-   Teszt-SQL: `security-toolkit infra add-test-login <projekt>_test`. ([2. fejezet](02-sonar-es-mssql.md))
-3. Fejlesztői gép (Dockerrel): `install.bat --no-infra` (Linuxon `sudo bash install.sh --no-infra`), majd a repóban
-   `security-toolkit install --project-root .` → a generált fájlok commitolása. ([3. fejezet](03-telepites-projektbe.md))
-4. Azure DevOps: pipeline a `azure-security-toolkit.yml`-ből, `SONAR_TOKEN` és a többi secret
-   felvétele, első futtatás, a pool-hozzáférés engedélyezése. GitHubon ugyanez Actions workflow-val. ([4. fejezet](04-pipeline.md))
-5. Eredmények: `security-results` artifact (`summary.md`), Scans fül, Sonar UI. ([5. fejezet](05-kiertekeles.md))
+1. CI machine: Docker Desktop, .NET SDK, Node, Git, Chrome → `install.bat --sonar --mssql` as
+   administrator → install the Azure DevOps agent as a service → restart the agent service. On Linux:
+   Docker Engine, `sudo bash install.sh --sonar --mssql`, agent with `svc.sh`.
+   ([Chapter 1](01-machine-and-agent.md))
+2. Sonar: first login, password change, create the project **by hand**, a project analysis token for the
+   pipeline; developers get *Execute Analysis*, and locally everyone uses their own user token.
+   Test SQL: `security-toolkit infra add-test-login <project>_test`. ([Chapter 2](02-sonar-and-mssql.md))
+3. Developer machine (with Docker): `install.bat --no-infra` (on Linux `sudo bash install.sh --no-infra`),
+   then in the repository `security-toolkit install --project-root .` → commit the generated files.
+   ([Chapter 3](03-project-installation.md))
+4. Azure DevOps: a pipeline from `azure-security-toolkit.yml`, add `SONAR_TOKEN` and the other secrets,
+   first run, permit the pool access. On GitHub the same with an Actions workflow.
+   ([Chapter 4](04-pipeline.md))
+5. Results: the `security-results` artifact (`summary.md`), the Scans tab, the Sonar UI.
+   ([Chapter 5](05-evaluation.md))
 
-## Jelölések
+## Conventions
 
-- `<szögletes zárójel>`: a saját értékedre cserélendő (pl. `<org>` = az Azure DevOps szervezet neve).
-- A parancsok PowerShellben futnak, ha nincs másképp jelölve (a `security-toolkit` parancsok
-  Linuxon bash-ből ugyanígy). A **rendszergazdaként** jelölt lépésekhez emelt jogú terminál kell,
-  Linuxon `sudo`.
-- A példákban az agent pool neve `SecurityToolkit`, a Sonar-projekté `MyApp`. Ezek csak minták.
+- `<angle brackets>`: replace with your own value (e.g. `<org>` = the name of the Azure DevOps
+  organization).
+- Commands run in PowerShell unless marked otherwise (the `security-toolkit` commands work the same from
+  bash on Linux). Steps marked **as administrator** need an elevated terminal, `sudo` on Linux.
+- In the examples the agent pool is called `SecurityToolkit` and the Sonar project `MyApp`. These are
+  only examples.

@@ -1,5 +1,7 @@
 # 3. Telepítés egy célprojektbe
 
+[English](../03-project-installation.md) · **Magyar**
+
 [← 2. Sonar és teszt-SQL](02-sonar-es-mssql.md) · [Tartalomjegyzék](README.md) · [Következő: 4. Pipeline →](04-pipeline.md)
 
 A projekt-telepítés egy tetszőleges .NET és/vagy Angular (npm) repóba generálja a `.security/`

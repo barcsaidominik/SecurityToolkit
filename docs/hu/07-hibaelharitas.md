@@ -1,5 +1,7 @@
 # 7. Hibaelhárítás
 
+[English](../07-troubleshooting.md) · **Magyar**
+
 [← 6. Helyi futtatás és CLI](06-helyi-futtatas-es-cli.md) · [Tartalomjegyzék](README.md) · [Következő: 8. LLM-támogatott javítás →](08-llm-tamogatott-javitas.md)
 
 A tünet szerint keresd ki a hibát. Szinte mindegyik élesben előfordult már.
@@ -23,6 +25,7 @@ A tünet szerint keresd ki a hibát. Szinte mindegyik élesben előfordult már.
 
 | Tünet | Ok | Megoldás |
 |---|---|---|
+| `Error: Could not find a part of the path '…/.security/security.config.json'` (exit 2) | ebben a repóban (vagy ezen az ágon) még nincs telepítve a toolkit | `security-toolkit install --project-root .` ([3. fejezet](03-telepites-projektbe.md)) |
 | `Image must be pinned first by the installer.` | a lockban nincs digest (csak `--configure-only` futott, vagy egy új eszközt kapcsoltak be) | teljes `security-toolkit install --project-root . --non-interactive` egy Dockeres gépen, a `security.lock.json` commitolása ([3.4](03-telepites-projektbe.md#34-telepítés-felügyelet-nélkül---non-interactive)) |
 | `Pin the .NET tool version first.` | ugyanez a DevSkim / SonarScanner / dotnet-coverage esetén | ugyanaz |
 | A telepítés lefut, de egy fájl nem frissül | az owned fájlt valaki kézzel módosította, ezért a telepítő kihagyta | `install --check` → `ManualChangesDetected`; a kézi módosítás visszavonása ([3.7](03-telepites-projektbe.md#37-karbantartás-és-frissítés)) |
@@ -69,7 +72,7 @@ A tünet szerint keresd ki a hibát. Szinte mindegyik élesben előfordult már.
 | Tünet | Ok | Megoldás |
 |---|---|---|
 | Commitnál: `security-toolkit: not found` | a git a CLI telepítése előtt indított shellből vagy GUI-ból fut | új terminál, illetve a git-kliens (IDE) újraindítása. Ne használj `--no-verify`-t. |
-| Commitnál a hook `FileNotFoundException`-nel elhasal egy ágon | **ismert korlát:** a hook minden ágon lefut, és egy olyan ágon, ahol nincs `.security/security.config.json`, elbukik | olyan ágon dolgozz, amelyen a toolkit telepítve van |
+| Commitnál a hook figyelmeztet, hogy nincs `.security/security.config.json`, és kihagyja a vizsgálatot | a hook minden ágon lefut, és ezen az ágon nincs telepítve a toolkit | ez várt viselkedés, a commit átmegy. Ha az ágat is vizsgálni kell, telepítsd rá a toolkitet. |
 
 ## Ha egyik sem illik
 

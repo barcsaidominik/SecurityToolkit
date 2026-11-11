@@ -1,5 +1,7 @@
 # 1. CI-gép előkészítése és az Azure DevOps agent
 
+[English](../01-machine-and-agent.md) · **Magyar**
+
 [← Tartalomjegyzék](README.md) · [Következő: 2. Sonar és teszt-SQL →](02-sonar-es-mssql.md)
 
 Ebben a fejezetben egy üres Windows gépből működő **self-hosted Azure DevOps agent** lesz, amelyen
@@ -7,8 +9,10 @@ a SecurityToolkit CLI és a Docker is elérhető. Ez gépenként egyszer kell. *
 Linuxos fejlesztői gépre) a [1.7](#17-linux-ci-gép-windows-helyett) írja le a különbségeket.
 
 > **Miért self-hosted agent?** A generált pipeline a gépre telepített `security-toolkit` parancsot
-> hívja, és a közös Sonar-szerver is ezen a gépen fut Dockerben. Microsoft-hosted (efemer) agenten
-> ez minden futáskor újratelepítést igényelne, ezt a toolkit nem támogatja.
+> hívja, és a közös Sonar-szerver is ezen a gépen fut Dockerben. Microsoft-hosted (efemer) agenten a
+> pipeline egy rögzített CLI-release-t tölthet le helyette (`toolkitRelease`, ld.
+> [4.7](04-pipeline.md#47-efemer-vagy-hosted-agent-a-cli-letöltése-release-ből)), a közös Sonar-szervert
+> viszont onnan általában nem éri el.
 
 ## 1.1 Hardver és operációs rendszer
 
@@ -97,7 +101,7 @@ bejelentkezés után) futtasd: `docker ps`. A parancs hiba nélkül lefut.
 
 1. Klónozd a SecurityToolkit repót egy állandó helyre, pl.:
    ```powershell
-   git clone https://dev.azure.com/<org>/<projekt>/_git/SecurityToolkit C:\Tools\SecurityToolkit
+   git clone https://github.com/barcsaidominik/SecurityToolkit C:\Tools\SecurityToolkit
    ```
 2. **Rendszergazdai** parancssorból, a repó gyökerében:
    ```bat
@@ -109,7 +113,7 @@ bejelentkezés után) futtasd: `docker ps`. A parancs hiba nélkül lefut.
    - bemásolja ide: `C:\Program Files\SecurityToolkit\bin\security-toolkit.exe`;
    - hozzáadja ezt a mappát a **gépi** PATH-hoz;
    - megkérdezi, telepítse-e a gépi infrát (Sonar, teszt-SQL). Ezt a [2. fejezet](02-sonar-es-mssql.md)
-     részletezi. CI-gépen mindkettőre **I** a válasz.
+     részletezi. CI-gépen mindkettőre **Y** a válasz.
 
    Kérdések nélkül: `install.bat --sonar --mssql` (CI-gép), vagy `install.bat --no-infra`
    (fejlesztői gép, ahol a csapat közös Sonarját használjátok).

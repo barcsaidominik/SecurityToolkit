@@ -1,5 +1,7 @@
 # 6. Helyi futtatás és teljes CLI-referencia
 
+[English](../06-local-runs-and-cli.md) · **Magyar**
+
 [← 5. Kiértékelés](05-kiertekeles.md) · [Tartalomjegyzék](README.md) · [Következő: 7. Hibaelhárítás →](07-hibaelharitas.md)
 
 Minden, amit a pipeline csinál, a saját gépeden is futtatható ugyanazzal a CLI-vel. Így egy
@@ -233,8 +235,8 @@ Efemer és hosted agentekhez a toolkit GitHub Release-ként is megjelenik
 ([4.7](04-pipeline.md#47-efemer-vagy-hosted-agent-a-cli-letöltése-release-ből)). Kiadni egy verziótaggel lehet:
 
 ```powershell
-git tag v1.2.0
-git push GitHub v1.2.0
+git tag -a v1.2.0 -m "v1.2.0"
+git push origin v1.2.0
 ```
 
 A `.github/workflows/release.yml` erre lefuttatja a teszteket, megépíti a `win-x64`, `linux-x64` és

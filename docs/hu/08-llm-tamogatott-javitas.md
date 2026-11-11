@@ -1,5 +1,7 @@
 # 8. LLM-támogatott kiértékelés és javítás
 
+[English](../08-llm-assisted-remediation.md) · **Magyar**
+
 [← 7. Hibaelhárítás](07-hibaelharitas.md) · [Tartalomjegyzék](README.md)
 
 Ez a fejezet azt írja le, hogyan dolgozza fel egy fejlesztő és egy kódoló LLM-agent **együtt** egy projekt összes nyitott scanner- és Sonar-találatát: lekérdezés, egységes
@@ -98,7 +100,7 @@ Két egyenértékű forrás, ebben a preferencia-sorrendben:
 
 1. **Helyi újrafuttatás** a fő ág baseline commitján:
    ```powershell
-   security-toolkit scan --include-sonar --run-id remediation-baseline
+   security-toolkit scan --project-root . --include-sonar --run-id remediation-baseline
    ```
    Előny: ugyanaz a parancs ellenőrzi később a javítást (5. lépés). Ha a projekt nem buildel
    helyben vagy a Sonar-futás túl hosszú, a Sonar kihagyható (`--include-sonar` nélkül), az
@@ -259,7 +261,7 @@ Csoportonként (vagy a fejlesztő által összevont csoportokként):
    - az érintett tesztek, majd a teljes tesztcsomag, ha a változás megosztott kódot érint;
    - **célzott újra-scan** az érintett eszközzel:
      ```powershell
-     security-toolkit scan --tool <eszköz> --run-id remediation-G02
+     security-toolkit scan --project-root . --tool <eszköz> --run-id remediation-G02
      ```
      (Sonar-szabálynál a Sonar-futás lassú: elég, ha a pipeline a PR-on lefuttatja; ilyenkor a
      PR-leírásban jelezni kell, hogy a Sonar-ellenőrzés a pipeline-ra vár.)
@@ -343,7 +345,7 @@ Ez a szakasz kötelező érvényű az agentre.
 A fejlesztő ezt adja az agentnek (a `<…>` részeket kitöltve):
 
 ```text
-Dolgozz a docs/08-llm-tamogatott-javitas.md szerint; a 8.8 Agent-szerződés kötelező.
+Dolgozz a docs/hu/08-llm-tamogatott-javitas.md szerint; a 8.8 Agent-szerződés kötelező.
 
 Projekt: <repó útvonala>
 Baseline: pipeline run <build-szám>, commit <sha>   (vagy: futtass helyi baseline-t)

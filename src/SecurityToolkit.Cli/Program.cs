@@ -1,7 +1,7 @@
 using SecurityToolkit.Cli;
 using System.Text;
 
-// Ensure Hungarian accented characters render/parse correctly regardless of the host
+// Ensure non-ASCII characters (paths, scanner output) render/parse correctly regardless of the host
 // console's default code page. Setting OutputEncoding is safe in practice; InputEncoding
 // can throw when no real console is attached (e.g. output redirected to a file/pipe in CI),
 // which is a known Windows console limitation, not an error worth failing the process for.
