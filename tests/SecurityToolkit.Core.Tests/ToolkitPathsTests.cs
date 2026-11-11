@@ -80,4 +80,39 @@ public class ToolkitPathsTests : IDisposable
 
         Assert.Equal(expected, resolved);
     }
+
+    [Theory]
+    [InlineData("20261111-191754-123")] // the CLI's default timestamp
+    [InlineData("4711")] // Azure $(Build.BuildId)
+    [InlineData("1234567890-2")] // GitHub <run_id>-<run_attempt>
+    [InlineData("e2e_run.1")]
+    public void IsValidRunId_PipelineAndDefaultIds_AreAccepted(string runId)
+    {
+        Assert.True(ToolkitPaths.IsValidRunId(runId));
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData(".")]
+    [InlineData("..")]
+    [InlineData("../outside")]
+    [InlineData("..\\outside")]
+    [InlineData("a/b")]
+    [InlineData("/abs")]
+    [InlineData("C:\\abs")]
+    [InlineData("-leading-dash")]
+    [InlineData("has space")]
+    [InlineData("semi;colon")]
+    [InlineData("trailing\n")]
+    public void IsValidRunId_TraversalSeparatorsAndShellCharacters_AreRejected(string runId)
+    {
+        Assert.False(ToolkitPaths.IsValidRunId(runId));
+    }
+
+    [Fact]
+    public void IsValidRunId_LongerThan128Characters_IsRejected()
+    {
+        Assert.True(ToolkitPaths.IsValidRunId(new string('a', 128)));
+        Assert.False(ToolkitPaths.IsValidRunId(new string('a', 129)));
+    }
 }

@@ -62,7 +62,7 @@ $env:ConnectionStrings__Default = Read-Host 'Teszt connection string'
 | `--secrets-only` | csak Gitleaks, a munkaterületen (index nélkül) |
 | `--semgrep-scope repository\|frontend` | a Semgrep-hatókör egyszeri felülírása |
 | `--config-file <útvonal>` | más config használata a `.security/security.config.json` helyett |
-| `--run-id <id>` | ebbe a `results/<id>/` mappába írjon, és a meglévő `status.json`-nal fésülje össze. Így több `--tool` hívás eredménye egy riportba kerül, ahogy a pipeline-ban. |
+| `--run-id <id>` | ebbe a `results/<id>/` mappába írjon, és a meglévő `status.json`-nal fésülje össze. Így több `--tool` hívás eredménye egy riportba kerül, ahogy a pipeline-ban. Az azonosító egyetlen mappanév: 1–128 betű, számjegy, `.`, `_` vagy `-`, betűvel vagy számjeggyel kezdődik; minden más `2`-vel lép ki (ugyanez a szabály a `report --run`-ra is). |
 
 Kimenet: `.security/results/<run-id>/` (`summary.md`, `status.json`, eszközönkénti riportok), és a
 konzolon egy soros összefoglaló eszközönként. Exit kód: `0` / `1` / `2`, mint a pipeline-ban

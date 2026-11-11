@@ -1,3 +1,4 @@
+using SecurityToolkit.Core;
 using SecurityToolkit.Core.Scanners;
 using System.CommandLine;
 
@@ -36,6 +37,12 @@ public static class ReportCommandFactory
             string outputDirectory;
             if (run is not null)
             {
+                if (!ToolkitPaths.IsValidRunId(run))
+                {
+                    Console.Error.WriteLine("--run must be a run id under .security/results (letters, digits, '.', '_' or '-').");
+                    return 2;
+                }
+
                 outputDirectory = Path.Combine(resultsDirectory, run);
             }
             else if (Directory.Exists(resultsDirectory))

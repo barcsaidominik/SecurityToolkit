@@ -44,6 +44,39 @@ public class ExitCodeTests : IDisposable
         Assert.Equal(2, await parseResult.InvokeAsync());
     }
 
+    [Theory]
+    [InlineData("../escaped")]
+    [InlineData("..")]
+    [InlineData("a/b")]
+    public async Task Scan_RunIdOutsideResults_ExitsTwoBeforeWritingAnything(string runId)
+    {
+        var project = Path.Combine(_root, "project");
+        var securityDirectory = Path.Combine(project, ".security");
+        Directory.CreateDirectory(securityDirectory);
+        await File.WriteAllTextAsync(
+            Path.Combine(securityDirectory, SecurityToolkit.Core.Installation.SecurityToolkitInstaller.ConfigFileName),
+            """{ "tools": {} }""");
+
+        var parseResult = CliApp.BuildRootCommand().Parse(new[] { "scan", "--project-root", project, "--run-id", runId });
+
+        Assert.Equal(2, await parseResult.InvokeAsync());
+        Assert.False(Directory.Exists(Path.Combine(securityDirectory, "escaped")));
+        Assert.False(Directory.Exists(Path.Combine(securityDirectory, "results")));
+    }
+
+    [Fact]
+    public async Task Report_RunOutsideResults_ExitsTwo()
+    {
+        // A status.json one level above results/ must not be reachable through --run.
+        var securityDirectory = Path.Combine(_root, ".security");
+        Directory.CreateDirectory(Path.Combine(securityDirectory, "results"));
+        await File.WriteAllTextAsync(Path.Combine(securityDirectory, "status.json"), """{ "schemaVersion": 1, "tools": [] }""");
+
+        var parseResult = CliApp.BuildRootCommand().Parse(new[] { "report", "--project-root", _root, "--run", ".." });
+
+        Assert.Equal(2, await parseResult.InvokeAsync());
+    }
+
     [Fact]
     public async Task Install_DryRun_ExitsZero()
     {

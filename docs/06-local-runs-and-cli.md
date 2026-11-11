@@ -64,7 +64,7 @@ $env:ConnectionStrings__Default = Read-Host 'Test connection string'
 | `--secrets-only` | Gitleaks only, on the working tree (without the index) |
 | `--semgrep-scope repository\|frontend` | a one-time override of the Semgrep scope |
 | `--config-file <path>` | use another config instead of `.security/security.config.json` |
-| `--run-id <id>` | write into this `results/<id>/` folder and merge with the existing `status.json`. This puts the results of several `--tool` calls into one report, as in the pipeline. |
+| `--run-id <id>` | write into this `results/<id>/` folder and merge with the existing `status.json`. This puts the results of several `--tool` calls into one report, as in the pipeline. The id is a single folder name: 1–128 letters, digits, `.`, `_` or `-`, starting with a letter or digit; anything else exits with `2` (the same rule applies to `report --run`). |
 
 Output: `.security/results/<run-id>/` (`summary.md`, `status.json`, per-tool reports), plus a one-line
 summary per tool on the console. Exit code: `0` / `1` / `2`, as in the pipeline

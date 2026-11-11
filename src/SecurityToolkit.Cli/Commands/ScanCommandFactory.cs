@@ -94,6 +94,13 @@ public static class ScanCommandFactory
                 return 2;
             }
 
+            // Exit 2, not a parse error (exit 1 would read as a blocking finding in a pipeline).
+            if (parseResult.GetValue(runIdOption) is { } requestedRunId && !ToolkitPaths.IsValidRunId(requestedRunId))
+            {
+                Console.Error.WriteLine("--run-id must be 1-128 letters, digits, '.', '_' or '-', starting with a letter or digit.");
+                return 2;
+            }
+
             var root = Path.GetFullPath(parseResult.GetValue(projectRootOption)!);
             var securityDirectory = Path.Combine(root, ".security");
             var configPath = parseResult.GetValue(configFileOption)

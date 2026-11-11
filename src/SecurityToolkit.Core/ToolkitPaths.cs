@@ -42,4 +42,16 @@ public static class ToolkitPaths
 
         return full;
     }
+
+    private static readonly System.Text.RegularExpressions.Regex RunIdPattern =
+        new(@"\A[A-Za-z0-9][A-Za-z0-9._-]{0,127}\z", System.Text.RegularExpressions.RegexOptions.CultureInvariant);
+
+    /// <summary>
+    /// True when <paramref name="runId"/> is safe as the single results/&lt;run-id&gt; directory name,
+    /// on the host and in the scanner containers' mount path: letters, digits, '.', '_' and '-',
+    /// starting with a letter or digit (so never "." or ".."), at most 128 characters. Covers the
+    /// generated pipelines' ids (Azure build id, GitHub run_id-run_attempt) and the default
+    /// timestamp.
+    /// </summary>
+    public static bool IsValidRunId(string runId) => RunIdPattern.IsMatch(runId);
 }
