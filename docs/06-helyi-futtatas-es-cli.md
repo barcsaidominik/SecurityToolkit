@@ -208,7 +208,7 @@ eszközt vagy a coverage-et kapcsolod be, teljes `install` kell.
 
 ## 6.5 A toolkit buildelése forrásból
 
-A SecurityToolkit repóban (.NET 10 SDK):
+A SecurityToolkit repóban (.NET 11 SDK):
 
 ```powershell
 dotnet build SecurityToolkit.slnx

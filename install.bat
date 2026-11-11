@@ -18,7 +18,7 @@ if errorlevel 1 (
 set "TARGET=%ProgramFiles%\SecurityToolkit\bin"
 if not exist "%TARGET%" mkdir "%TARGET%"
 
-copy /Y "src\SecurityToolkit.Cli\bin\Release\net10.0\win-x64\publish\security-toolkit.exe" "%TARGET%\security-toolkit.exe" >nul
+copy /Y "src\SecurityToolkit.Cli\bin\Release\net11.0\win-x64\publish\security-toolkit.exe" "%TARGET%\security-toolkit.exe" >nul
 if errorlevel 1 (
     echo Masolas sikertelen: %TARGET%\security-toolkit.exe
     exit /b 1

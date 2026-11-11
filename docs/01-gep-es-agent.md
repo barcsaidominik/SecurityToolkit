@@ -37,7 +37,7 @@ Rendszergazdai PowerShellben:
 
 ```powershell
 winget install --id Git.Git --scope machine -e
-winget install --id Microsoft.DotNet.SDK.10 -e
+winget install --id Microsoft.DotNet.SDK.11 -e
 winget install --id OpenJS.NodeJS.LTS --scope machine -e
 winget install --id Google.Chrome --scope machine -e
 ```
@@ -105,7 +105,7 @@ bejelentkezés után) futtasd: `docker ps`. A parancs hiba nélkül lefut.
    install.bat
    ```
    A script:
-   - self-contained, egyfájlos exe-t publikál (`dotnet publish`), ehhez kell a .NET 10 SDK;
+   - self-contained, egyfájlos exe-t publikál (`dotnet publish`), ehhez kell a .NET 11 SDK;
    - bemásolja ide: `C:\Program Files\SecurityToolkit\bin\security-toolkit.exe`;
    - hozzáadja ezt a mappát a **gépi** PATH-hoz;
    - megkérdezi, telepítse-e a gépi infrát (Sonar, teszt-SQL). Ezt a [2. fejezet](02-sonar-es-mssql.md)
@@ -219,7 +219,7 @@ kapcsolója (winget) Linuxon nem telepít, csak jelzi, mi hiányzik. Szükséges
 | Szoftver | Megjegyzés |
 |---|---|
 | Git | `apt install git` |
-| .NET 10 SDK | [Microsoft-csomagtár vagy `dotnet-install.sh`](https://learn.microsoft.com/dotnet/core/install/linux) |
+| .NET 11 SDK | [Microsoft-csomagtár vagy `dotnet-install.sh`](https://learn.microsoft.com/dotnet/core/install/linux) |
 | Node.js LTS | csak frontendhez; pl. a NodeSource-csomagtárból |
 | Docker Engine + Compose plugin | [docs.docker.com/engine/install](https://docs.docker.com/engine/install/), `docker-compose-plugin` csomaggal |
 | Chrome vagy Chromium | csak a Karma-alapú frontend-coverage-hez (`ng test`); más útvonalnál `CHROME_BIN`. A Vitest alapból böngésző nélkül fut |

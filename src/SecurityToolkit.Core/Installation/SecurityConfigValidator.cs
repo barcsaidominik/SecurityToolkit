@@ -49,7 +49,7 @@ internal static class SecurityConfigValidator
         }
 
         var sdkChannel = GetString(config, "sdkChannel");
-        if (sdkChannel is not ("8.0" or "9.0" or "10.0"))
+        if (sdkChannel is not ("8.0" or "9.0" or "10.0" or "11.0"))
         {
             throw new InvalidOperationException("Unsupported SDK channel. Install the actual project SDK manually and disable prerequisite installation.");
         }

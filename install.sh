@@ -50,7 +50,7 @@ fi
 
 target=/opt/security-toolkit/bin
 install -d -m 755 "$target"
-install -m 755 "src/SecurityToolkit.Cli/bin/Release/net10.0/$rid/publish/security-toolkit" "$target/security-toolkit"
+install -m 755 "src/SecurityToolkit.Cli/bin/Release/net11.0/$rid/publish/security-toolkit" "$target/security-toolkit"
 ln -sf "$target/security-toolkit" /usr/local/bin/security-toolkit
 echo "Telepítve: $target/security-toolkit (PATH: /usr/local/bin/security-toolkit)"
 
