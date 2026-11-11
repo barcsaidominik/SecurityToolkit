@@ -339,6 +339,8 @@ public class SonarScannerTests
                     "web": { "architect": { "test": { "builder": "@angular/build:karma", "options": {} } } },
                     "pwa": { "architect": { "test": { "builder": "@angular/build:unit-test", "options": { "runner": "karma" } } } },
                     "vit": { "architect": { "test": { "builder": "@angular/build:unit-test" } } },
+                    "../out": { "architect": { "test": { "builder": "@angular/build:unit-test", "options": { "runner": "vitest" } } } },
+                    "jst": { "architect": { "test": { "builder": "@angular-builders/jest:run" } } },
                     "lib": { "architect": { "build": { "builder": "@angular/build:ng-packagr" } } }
                   }
                 }
@@ -359,12 +361,26 @@ public class SonarScannerTests
                 return new ProcessResult(0, "", "");
             }
 
+            // Vitest writes into Angular's default coverage/<project>; a stale report from an earlier
+            // local run is removed first, so it can never pass for this run's.
+            var vitestReport = Path.Combine(client, "coverage", "vit", "lcov.info");
+            Directory.CreateDirectory(Path.GetDirectoryName(vitestReport)!);
+            File.WriteAllText(vitestReport, "stale");
+            var staleSeen = true;
+            ProcessResult WriteVitestLcov()
+            {
+                staleSeen = File.Exists(vitestReport);
+                File.WriteAllText(vitestReport, $"TN:\nSF:src{Path.DirectorySeparatorChar}app{Path.DirectorySeparatorChar}v.ts\nend_of_record\n");
+                return new ProcessResult(0, "", "");
+            }
+
             var runner = new FakeProcessRunner();
             runner.Enqueue(scannerPath, new ProcessResult(0, "", ""));
             runner.Enqueue("dotnet", new ProcessResult(0, "", ""));
             runner.Enqueue("node", new ProcessResult(0, "", "")); // npm ci, once per workspace
             runner.Enqueue("node", _ => WriteLcov(1)); // ng test web
             runner.Enqueue("node", _ => WriteLcov(2)); // ng test pwa
+            runner.Enqueue("node", _ => WriteVitestLcov()); // ng test vit
             runner.Enqueue(scannerPath, new ProcessResult(0, "", ""));
             runner.Enqueue("dotnet", new ProcessResult(0, "", ""));
 
@@ -372,7 +388,7 @@ public class SonarScannerTests
 
             Assert.Contains(
                 "/d:sonar.javascript.lcov.reportPaths=" +
-                $"{Path.Combine(Coverage(1), "lcov.info").Replace('\\', '/')},{Path.Combine(Coverage(2), "lcov.info").Replace('\\', '/')}",
+                string.Join(',', new[] { 1, 2, 3 }.Select(i => Path.Combine(Coverage(i), "lcov.info").Replace('\\', '/'))),
                 runner.Calls[0].Arguments);
             Assert.Equal(new[] { "npm-cli.js", "ci", "--no-audit", "--no-fund" }, runner.Calls[2].Arguments);
             Assert.Equal(client, runner.Calls[2].WorkingDirectory);
@@ -391,6 +407,18 @@ public class SonarScannerTests
             Assert.DoesNotContain("--code-coverage", pwa.Arguments);
             Assert.DoesNotContain(pwa.Arguments, a => a.StartsWith("--karma-config", StringComparison.Ordinal));
 
+            var vit = runner.Calls[5];
+            Assert.Equal(client, vit.WorkingDirectory);
+            Assert.Equal(
+                new[] { "npm-cli.js", "exec", "--no", "--", "ng", "test", "vit", "--watch=false", "--coverage", "--coverage-reporters=lcovonly" },
+                vit.Arguments);
+            Assert.False(staleSeen);
+            Assert.False(File.Exists(Karma(3)));
+            Assert.False(File.Exists(vitestReport)); // moved into the results directory
+            Assert.Equal(
+                new[] { "TN:", "SF:" + Path.Combine(client, "src", "app", "v.ts"), "end_of_record" },
+                File.ReadAllLines(Path.Combine(Coverage(3), "lcov.info")));
+
             var karmaConfig = File.ReadAllText(Karma(1));
             Assert.Contains("lcovonly", karmaConfig);
             Assert.Contains(System.Text.Json.JsonSerializer.Serialize(Coverage(1)), karmaConfig);
@@ -405,9 +433,11 @@ public class SonarScannerTests
 
             var message = Assert.Single(results).Message;
             Assert.Contains("src/Static skipped (not an Angular workspace)", message);
-            Assert.Contains("src/Client:vit skipped (unsupported test builder @angular/build:unit-test, runner vitest)", message);
+            Assert.Contains("src/Client:../out skipped (project name is not a valid coverage path)", message);
+            Assert.Contains("src/Client:jst skipped (unsupported test builder @angular-builders/jest:run)", message);
             Assert.Contains("src/Client:web ok", message);
             Assert.Contains("src/Client:pwa ok", message);
+            Assert.Contains("src/Client:vit ok", message);
             Assert.DoesNotContain("lib", message);
         }
         finally

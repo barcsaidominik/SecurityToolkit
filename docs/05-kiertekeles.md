@@ -104,7 +104,9 @@ jelenik meg:
 | `.NET report imported, but tests failed (exit 1; see sonar-test-dotnet.log)` | van coverage, de egyes tesztek elbuktak, ezért a lefedettség alacsonyabb a valósnál | a `sonar-test-dotnet.log`-ban keresd a `Failed` sorokat; a tesztjavítás a projekt csapatáé |
 | `<cél>:<projekt> ok` | az Angular-projekt lcov-ja feltöltve | – |
 | `<cél>:<projekt> no report (exit 1; see sonar-test-frontend-<n>.log)` | az Angular-tesztek nem futottak le (gyakran fordítási hiba) | a megnevezett log |
-| `<cél>:<projekt> skipped (unsupported test builder …)` | a projekt nem Karma-alapú (pl. Vitest) | jelenleg nem támogatott |
+| `<cél>:<projekt> no report (…)` Vitest-projektnél | gyakran hiányzik a coverage-provider (a logban: `Code coverage requires either "@vitest/coverage-v8" …`) | `npm i -D @vitest/coverage-v8` a projektben ([3.5](03-telepites-projektbe.md#35-sonar-coverage)) |
+| `<cél>:<projekt> skipped (unsupported test builder …)` | a projekt se nem Karma-, se nem Vitest-alapú (pl. Jest) | jelenleg nem támogatott |
+| `<cél>:<projekt> skipped (project name is not a valid coverage path)` | az `angular.json` projektneve a `coverage/` mappán kívülre mutatna | nevezd át a projektet |
 | `<cél> skipped (not an Angular workspace)` | a frontend célban nincs `angular.json` | csak Angular-frontend coverage támogatott |
 | `.NET skipped (dotnet-coverage is not provisioned; rerun install)` | a lockban nincs rögzítve az eszköz | teljes `install` ([3.5](03-telepites-projektbe.md#35-sonar-coverage)) |
 | `.NET failed (…)` / `<cél>:<projekt> failed (…)` | a tesztfuttatás el sem tudott indulni | a zárójelben lévő hibaüzenet |

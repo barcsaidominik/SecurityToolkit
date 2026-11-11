@@ -207,11 +207,21 @@ Mit futtat:
 
 - **.NET:** `dotnet-coverage collect … dotnet test <dotnetTarget> --no-build [--filter …]`.
 - **Angular:** minden `angular.json`-os frontend célban `npm ci` (ha nincs `node_modules`), majd az
-  `angular.json` minden `test` targettel rendelkező projektjére külön `ng test`, headless Chrome-mal:
-  - `@angular/build:karma` (vagy más `…:karma`) builder: `--code-coverage --karma-config=<generált>`;
-  - `@angular/build:unit-test` builder `runner: karma`-val: `--coverage --runner-config=<generált>`;
-  - más builder (pl. Vitest, Jest): figyelmeztetéssel kihagyva.
-  - A Chrome-ot magától megkeresi. Más helyen lévő böngészőt a `CHROME_BIN` környezeti változóval adhatsz meg.
+  `angular.json` minden `test` targettel rendelkező projektjére külön `ng test`:
+  - `@angular/build:karma` (vagy más `…:karma`) builder: `--code-coverage --karma-config=<generált>`,
+    headless Chrome-mal;
+  - `@angular/build:unit-test` builder `runner: karma`-val: `--coverage --runner-config=<generált>`,
+    headless Chrome-mal;
+  - `@angular/build:unit-test` builder Vitesttel (ez az alapértelmezett runnere, az új Angular-projektek
+    így jönnek létre): `--coverage --coverage-reporters=lcovonly`. A projekt saját Vitest-beállításai
+    (pl. `browsers`, `runnerConfig`) érvényben maradnak. Az lcov az Angular alapértelmezett
+    `coverage/<projekt>/` mappájába kerül, onnan a toolkit átmozgatja a futás results-mappájába (a
+    korábbi helyi futásból ott maradt riportot előtte törli). **A projektben kell egy coverage-provider**
+    dev-függőségként: `npm i -D @vitest/coverage-v8` (vagy `@vitest/coverage-istanbul`), különben az
+    `ng test` hibával áll le, és `no report` megjegyzés lesz belőle. Ha a projekt saját Vitest-configja
+    más `coverage.reportsDirectory`-t ad meg, a toolkit nem találja a riportot;
+  - más builder (pl. Jest): figyelmeztetéssel kihagyva.
+  - A Karma a Chrome-ot magától megkeresi. Más helyen lévő böngészőt a `CHROME_BIN` környezeti változóval adhatsz meg.
 
 > **A coverage sosem buktatja el a Sonar-lépést.** Ha egy teszt elbukik, nincs riport, vagy hiányzik
 > egy eszköz, a lépés `Completed` marad, és csak egy `Coverage: …` megjegyzés jelzi a gondot az

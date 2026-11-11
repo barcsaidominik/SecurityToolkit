@@ -12,7 +12,7 @@ namespace SecurityToolkit.Core.Scanners;
 /// attempts "end" once "begin" has run, regardless of what happens in between.
 ///
 /// Optional coverage import (sonar.coverage): between build and "end", runs the .NET tests under
-/// dotnet-coverage and each Angular frontend target's Karma tests with an lcov reporter, then
+/// dotnet-coverage and each Angular frontend target's Karma or Vitest tests with an lcov reporter, then
 /// lets "end" upload both reports. Coverage is best-effort by design: failing tests or a failed
 /// collection only add a warning to the result message, never fail the Sonar step.
 /// </summary>
@@ -215,14 +215,36 @@ public sealed class SonarScanner : IScanner
         return new[] { new ScanResult("sonar", projectKey, ScanStatus.Completed, total, Blocking: false, string.Join(" | ", messages)) };
     }
 
+    /// <summary>How an Angular project's tests run, which decides the <c>ng test</c> coverage flags.</summary>
+    private enum FrontendTestRunner
+    {
+        /// <summary>A <c>…:karma</c> builder: <c>--code-coverage --karma-config=&lt;generated&gt;</c>.</summary>
+        Karma,
+
+        /// <summary><c>@angular/build:unit-test</c> with <c>runner: karma</c>: <c>--coverage --runner-config=&lt;generated&gt;</c>.</summary>
+        UnitTestKarma,
+
+        /// <summary>
+        /// <c>@angular/build:unit-test</c> with Vitest (its default runner): <c>--coverage
+        /// --coverage-reporters=lcovonly</c>. The project's own Vitest config (if any) stays in charge;
+        /// the report lands in Angular's default <c>coverage/&lt;project&gt;</c> and is moved from there.
+        /// </summary>
+        Vitest,
+    }
+
     /// <summary>
-    /// One Angular project (of a frontendTargets workspace) whose Karma tests run with the toolkit's
-    /// lcov-reporting config. <see cref="UnitTestBuilder"/>: the project uses the newer
-    /// <c>@angular/build:unit-test</c> builder (runner: karma), whose flags differ from the karma
-    /// builder's (<c>--coverage</c>/<c>--runner-config</c> instead of <c>--code-coverage</c>/<c>--karma-config</c>).
+    /// One Angular project (of a frontendTargets workspace) whose tests run with an lcov reporter.
+    /// <see cref="KarmaConfigPath"/> is the generated Karma config (Karma runners only);
+    /// <see cref="VitestReportPath"/> is where Vitest writes its lcov (Vitest only).
     /// </summary>
     private sealed record FrontendCoverageTarget(
-        string Target, string Path, string Project, bool UnitTestBuilder, string KarmaConfigPath, string CoverageDirectory)
+        string Target,
+        string Path,
+        string Project,
+        FrontendTestRunner Runner,
+        string? KarmaConfigPath,
+        string? VitestReportPath,
+        string CoverageDirectory)
     {
         public string Label => $"{Target}:{Project}";
     }
@@ -303,10 +325,28 @@ public sealed class SonarScanner : IScanner
                 var builder = ScannerSupport.GetString(test, "builder") ?? string.Empty;
                 var runner = ScannerSupport.GetDictionary(test, "options") is { } options ? ScannerSupport.GetString(options, "runner") : null;
                 var unitTest = builder == "@angular/build:unit-test";
-                if (!(builder.EndsWith(":karma", StringComparison.Ordinal) || (unitTest && runner == "karma")))
+                FrontendTestRunner? testRunner = builder.EndsWith(":karma", StringComparison.Ordinal) ? FrontendTestRunner.Karma
+                    : unitTest && runner == "karma" ? FrontendTestRunner.UnitTestKarma
+                    : unitTest && (runner ?? "vitest") == "vitest" ? FrontendTestRunner.Vitest
+                    : null;
+                if (testRunner is null)
                 {
-                    notes.Add($"{target}:{project} skipped (unsupported test builder {builder}{(unitTest ? $", runner {runner ?? "vitest"}" : string.Empty)})");
+                    notes.Add($"{target}:{project} skipped (unsupported test builder {builder}{(unitTest ? $", runner {runner}" : string.Empty)})");
                     continue;
+                }
+
+                // Angular's Vitest runner writes to coverage/<project name> (a scoped name nests). The
+                // name comes from the project's own angular.json: keep the file we delete/move inside it.
+                string? vitestReportPath = null;
+                if (testRunner == FrontendTestRunner.Vitest)
+                {
+                    var coverageRoot = Path.GetFullPath(Path.Combine(path, "coverage"));
+                    vitestReportPath = Path.GetFullPath(Path.Combine(coverageRoot, project, "lcov.info"));
+                    if (!vitestReportPath.StartsWith(coverageRoot + Path.DirectorySeparatorChar, StringComparison.Ordinal))
+                    {
+                        notes.Add($"{target}:{project} skipped (project name is not a valid coverage path)");
+                        continue;
+                    }
                 }
 
                 index++;
@@ -314,8 +354,11 @@ public sealed class SonarScanner : IScanner
                     target,
                     path,
                     project,
-                    unitTest,
-                    Path.Combine(context.OutputDirectory, $"karma-coverage-{index}.conf.cjs"),
+                    testRunner.Value,
+                    testRunner == FrontendTestRunner.Vitest
+                        ? null
+                        : Path.Combine(context.OutputDirectory, $"karma-coverage-{index}.conf.cjs"),
+                    vitestReportPath,
                     Path.Combine(context.OutputDirectory, $"frontend-coverage-{index}")));
             }
         }
@@ -378,17 +421,26 @@ public sealed class SonarScanner : IScanner
                         cancellationToken: cancellationToken).ConfigureAwait(false);
                 }
 
-                await File.WriteAllTextAsync(
-                    frontend.KarmaConfigPath, KarmaCoverageConfig.Build(frontend.CoverageDirectory), cancellationToken).ConfigureAwait(false);
-
-                var ngArguments = new List<string>
+                var ngArguments = new List<string> { "exec", "--no", "--", "ng", "test", frontend.Project, "--watch=false" };
+                if (frontend.Runner == FrontendTestRunner.Vitest)
                 {
-                    "exec", "--no", "--", "ng", "test", frontend.Project, "--watch=false",
-                    $"--browsers={KarmaCoverageConfig.LauncherName}",
-                };
-                ngArguments.AddRange(frontend.UnitTestBuilder
-                    ? new[] { "--coverage", $"--runner-config={frontend.KarmaConfigPath}" }
-                    : new[] { "--code-coverage", "--progress=false", $"--karma-config={frontend.KarmaConfigPath}" });
+                    // A report left over from an earlier local run must not pass for this run's.
+                    if (File.Exists(frontend.VitestReportPath))
+                    {
+                        File.Delete(frontend.VitestReportPath);
+                    }
+
+                    ngArguments.AddRange(new[] { "--coverage", "--coverage-reporters=lcovonly" });
+                }
+                else
+                {
+                    await File.WriteAllTextAsync(
+                        frontend.KarmaConfigPath!, KarmaCoverageConfig.Build(frontend.CoverageDirectory), cancellationToken).ConfigureAwait(false);
+                    ngArguments.Add($"--browsers={KarmaCoverageConfig.LauncherName}");
+                    ngArguments.AddRange(frontend.Runner == FrontendTestRunner.UnitTestKarma
+                        ? new[] { "--coverage", $"--runner-config={frontend.KarmaConfigPath}" }
+                        : new[] { "--code-coverage", "--progress=false", $"--karma-config={frontend.KarmaConfigPath}" });
+                }
 
                 var result = await _processRunner.RunAsync(
                     npm.FileName,
@@ -398,6 +450,12 @@ public sealed class SonarScanner : IScanner
                     cancellationToken: cancellationToken).ConfigureAwait(false);
 
                 var lcovPath = Path.Combine(frontend.CoverageDirectory, "lcov.info");
+                if (frontend.Runner == FrontendTestRunner.Vitest && File.Exists(frontend.VitestReportPath))
+                {
+                    Directory.CreateDirectory(frontend.CoverageDirectory);
+                    File.Move(frontend.VitestReportPath!, lcovPath, overwrite: true);
+                }
+
                 await AnchorLcovSourcePathsAsync(lcovPath, frontend.Path, cancellationToken).ConfigureAwait(false);
 
                 notes.Add(DescribeTestRun(frontend.Label, result.ExitCode, File.Exists(lcovPath), logFileName));
@@ -410,7 +468,7 @@ public sealed class SonarScanner : IScanner
     }
 
     /// <summary>
-    /// Karma writes the lcov <c>SF:</c> paths relative to the Angular workspace (<c>src\app\...</c>).
+    /// Karma and Vitest write the lcov <c>SF:</c> paths relative to the Angular workspace (<c>src\app\...</c>).
     /// Sonar resolves those by suffix, but the pipeline's Code Coverage tab maps them onto the
     /// repository root and silently drops every file it cannot find there, so only the .NET report
     /// (absolute paths) showed up in its file view. Absolute paths resolve in both.

@@ -222,7 +222,7 @@ kapcsolója (winget) Linuxon nem telepít, csak jelzi, mi hiányzik. Szükséges
 | .NET 10 SDK | [Microsoft-csomagtár vagy `dotnet-install.sh`](https://learn.microsoft.com/dotnet/core/install/linux) |
 | Node.js LTS | csak frontendhez; pl. a NodeSource-csomagtárból |
 | Docker Engine + Compose plugin | [docs.docker.com/engine/install](https://docs.docker.com/engine/install/), `docker-compose-plugin` csomaggal |
-| Chrome vagy Chromium | csak a frontend-coverage-hez (`ng test`); más útvonalnál `CHROME_BIN` |
+| Chrome vagy Chromium | csak a Karma-alapú frontend-coverage-hez (`ng test`); más útvonalnál `CHROME_BIN`. A Vitest alapból böngésző nélkül fut |
 
 Minden a gépi PATH-ra (`/usr/bin`, `/usr/local/bin`) kerüljön, ne egy felhasználó saját mappájába:
 az agent a saját fiókja alatt fut, és nem látja a többiekét.
