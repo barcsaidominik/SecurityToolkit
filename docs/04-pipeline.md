@@ -146,10 +146,23 @@ leállítást tiszteletben tartják. A mód itt is a `pipelineMode`-on múlik (a
 
 ### Runner
 
-A workflow **self-hosted runnert** vár, amin a `security-toolkit` a gépi PATH-on van (ugyanaz a gép és
-ugyanaz az `install.bat` / `install.sh`, mint az Azure agentnél, ld. [1. fejezet](01-gep-es-agent.md)).
-GitHub-hosted runneren nincs ott a CLI; ehhez a workflow-nak előbb le kell töltenie, ld.
-[4.7](#47-efemer-vagy-hosted-agent-a-cli-letöltése-release-ből).
+Két lehetőség van:
+
+- **GitHub-hosted runner** (pl. `githubRunsOn: ["ubuntu-latest"]`): ehhez a `toolkitRelease.version` kell,
+  a workflow ilyenkor első lépésként letölti és checksummal ellenőrzi a CLI-t, ld.
+  [4.7](#47-efemer-vagy-hosted-agent-a-cli-letöltése-release-ből). Az `ubuntu-latest` image-en a Docker és a
+  .NET SDK is fent van, más nem kell. A közös Sonart viszont egy hosted runner általában nem éri el, ezért
+  ott a Sonar-eszközt kapcsold ki, vagy a Sonar legyen az internetről elérhető.
+- **Self-hosted runner**, amin a `security-toolkit` a gépi PATH-on van (ugyanaz a gép és ugyanaz az
+  `install.bat` / `install.sh`, mint az Azure agentnél, ld. [1. fejezet](01-gep-es-agent.md)). A beállítása
+  lent.
+
+> **A kézi indítás csak a default branchről megy.** A workflow `workflow_dispatch`-csel (és opcionálisan
+> `githubSchedule`-lal) indul. A GitHub a *Run workflow* gombot csak akkor kínálja fel, ha a fájl már a
+> default branchen (pl. `main`) is megvan; egy feature-ágon lévő workflow így nem indítható. Az első
+> futás tehát a merge után jön.
+
+Self-hosted runner beállítása:
 
 1. Repó → *Settings* → *Actions* → *Runners* → **New self-hosted runner**, és kövesd a GitHub
    telepítési lépéseit. A runnert szolgáltatásként telepítsd (Windowson a `config.cmd` kérdésére,

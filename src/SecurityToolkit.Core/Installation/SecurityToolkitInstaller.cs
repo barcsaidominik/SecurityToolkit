@@ -332,9 +332,7 @@ public sealed class SecurityToolkitInstaller
 
                 if (settings.HasPipelineProvider("github"))
                 {
-                    messages.Add(
-                        $"GitHub: {GitHubWorkflowRelativePath} expects a self-hosted runner (githubRunsOn labels) with security-toolkit on PATH; " +
-                        "add SONAR_TOKEN (and the sonar.testEnvironment secrets) to the repository's Actions secrets. The installer does not connect to GitHub.");
+                    messages.Add(DescribeGitHubWorkflowSetup(settings));
                 }
             }
         }
@@ -455,6 +453,33 @@ public sealed class SecurityToolkitInstaller
                 $"Retired toolkit file left in place because it was changed by hand: {relative}. The toolkit no longer " +
                 "uses it; delete it by hand if you don't need it.");
         }
+    }
+
+    /// <summary>
+    /// The pending action for the generated GitHub workflow. What the runner needs depends on
+    /// toolkitRelease (the workflow downloads the CLI, so a GitHub-hosted runner works) and the
+    /// secrets on whether Sonar is on, so the message only asks for what this config needs.
+    /// </summary>
+    internal static string DescribeGitHubWorkflowSetup(SecurityConfig settings)
+    {
+        var labels = string.Join(", ", settings.GitHubRunsOn);
+        var runner = settings.ToolkitReleaseVersion.Length > 0
+            ? $"it downloads security-toolkit v{settings.ToolkitReleaseVersion} on the runner (runs-on: {labels}), so a GitHub-hosted runner works too; the runner needs Docker and the .NET SDK."
+            : $"it runs on a runner (runs-on: {labels}) that has security-toolkit on PATH (install.bat / install.sh); for a GitHub-hosted runner, set toolkitRelease.version.";
+
+        var secrets = new List<string>();
+        if (settings.IsToolEnabled("sonar"))
+        {
+            // testEnvironment only feeds the Sonar step's env block.
+            secrets.Add("SONAR_TOKEN");
+            secrets.AddRange(settings.SonarTestEnvironment.Select(e => e.Value));
+        }
+        var secretsPart = secrets.Count > 0
+            ? $" Add these repository Actions secrets: {string.Join(", ", secrets.Distinct(StringComparer.Ordinal))}."
+            : string.Empty;
+
+        return $"GitHub: {GitHubWorkflowRelativePath}: {runner}{secretsPart} " +
+            "GitHub offers a manually triggered workflow only once the file is on the default branch. The installer does not connect to GitHub.";
     }
 
     /// <summary>

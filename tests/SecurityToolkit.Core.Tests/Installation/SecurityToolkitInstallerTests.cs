@@ -805,6 +805,30 @@ public class SecurityToolkitInstallerTests : IDisposable
             "          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}\n" +
             "          ConnectionStrings__Default: ${{ secrets.TEST_DB_CONNECTION }}\n",
             yaml);
+
+        var github = Assert.Single(outcome.Messages, m => m.StartsWith("GitHub: ", StringComparison.Ordinal));
+        Assert.Contains("security-toolkit on PATH", github, StringComparison.Ordinal);
+        Assert.Contains("Actions secrets: SONAR_TOKEN, TEST_DB_CONNECTION.", github, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task InstallAsync_GitHubHostedWithToolkitRelease_AsksOnlyForWhatTheConfigNeeds()
+    {
+        // A downloaded CLI on a GitHub-hosted runner, Sonar off: no PATH install and no secrets to add.
+        var profile = GitHubProfile(
+            ("githubRunsOn", new List<object?> { "ubuntu-latest" }),
+            ("toolkitRelease", new Dictionary<string, object?> { ["version"] = "0.1.0" }),
+            ("tools", new Dictionary<string, object?> { ["sonar"] = false }));
+
+        var outcome = await new SecurityToolkitInstaller(Templates()).InstallAsync(
+            new InstallOptions(_root, NonInteractive: true, ConfigureOnly: true), profile, toolProvisioner: null);
+
+        Assert.Equal(0, outcome.ExitCode);
+        var github = Assert.Single(outcome.Messages, m => m.StartsWith("GitHub: ", StringComparison.Ordinal));
+        Assert.Contains("downloads security-toolkit v0.1.0 on the runner (runs-on: ubuntu-latest)", github, StringComparison.Ordinal);
+        Assert.Contains("default branch", github, StringComparison.Ordinal);
+        Assert.DoesNotContain("on PATH", github, StringComparison.Ordinal);
+        Assert.DoesNotContain("secrets", github, StringComparison.Ordinal);
     }
 
     [Theory]
